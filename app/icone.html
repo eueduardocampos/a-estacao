@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Ícone · A Estação</title>
+  <link rel="icon" href="icone-64.png">
+  <link rel="apple-touch-icon" href="icone-180.png">
+  <meta name="theme-color" content="#030870">
+  <!-- Figtree local (licença OFL, pacote @fontsource/figtree): nada sai da máquina -->
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/600.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/700.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/800.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: #ffffff; overflow: hidden; }
+    #quadro {
+      position: absolute; top: 40px; left: 40px; width: 700px; height: 700px; border-radius: 156px;
+      background: radial-gradient(circle at 35% 30%, #1a3cf0, #030870 70%);
+      box-shadow: inset 0 0 0 10px rgba(238, 76, 1, .0);
+    }
+    canvas { position: absolute; top: 40px; left: 40px; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="quadro"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { criarAstronauta } from './personagens.js';
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(2);
+    renderer.setSize(700, 700);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+    const cena = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(-0.62, 0.62, 0.62, -0.62, 0.1, 50);
+    camera.position.set(1.6, 1.9, 3.2);
+    camera.lookAt(0, 0.62, 0);
+    cena.add(new THREE.HemisphereLight(0xffffff, 0x7d73a6, 1.4));
+    const sol = new THREE.DirectionalLight(0xfff0dd, 2.4);
+    sol.position.set(2, 4, 3);
+    cena.add(sol);
+    const a = criarAstronauta(0xee4c01, 3, 'olhinhos');
+    a.rotation.y = 0.35;
+    cena.add(a);
+    a.userData.animar(0.42, 'esperar');
+    renderer.render(cena, camera);
+  </script>
+</body>
+</html>

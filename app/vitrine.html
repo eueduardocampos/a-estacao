@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vitrine de personagens · A Estação</title>
+  <link rel="icon" href="icone-64.png">
+  <link rel="apple-touch-icon" href="icone-180.png">
+  <meta name="theme-color" content="#030870">
+  <!-- Figtree local (licença OFL, pacote @fontsource/figtree): nada sai da máquina -->
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/600.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/700.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/800.css">
+  <style>
+    :root { --navy: #030870; --fundo-1: #d9d4ea; --fundo-2: #a99fca; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body { background: radial-gradient(ellipse at 50% 35%, var(--fundo-1), var(--fundo-2)); font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--navy); }
+    #cena { position: fixed; inset: 0; }
+    h1 { position: fixed; top: 16px; left: 20px; margin: 0; font-size: 20px; font-weight: 800; }
+    #legendas { position: fixed; bottom: 28px; left: 0; right: 0; display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; pointer-events: none; }
+    #legendas b { display: block; font-size: 18px; }
+    #legendas span { font-size: 13px; opacity: .75; }
+    #modos { position: fixed; top: 52px; left: 20px; font-size: 12px; opacity: .7; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="cena"></div>
+  <h1>Vitrine de personagens</h1>
+  <div id="modos">Em cada estilo: andando · trabalhando na mesa · esperando sua aprovação · descansando</div>
+  <div id="legendas"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+    import { ESTILOS, ASTRONAUTAS } from './personagens.js';
+    const CONJUNTO = new URLSearchParams(location.search).get('conjunto') === 'outros' ? ESTILOS : ASTRONAUTAS;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.getElementById('cena').appendChild(renderer.domElement);
+
+    const cena = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera();
+    camera.position.set(10, 8.5, 10);
+    camera.lookAt(0, 0.6, 0);
+    cena.add(new THREE.HemisphereLight(0xfff3e2, 0x7d73a6, 1.1));
+    const sol = new THREE.DirectionalLight(0xffe2c0, 2.2);
+    sol.position.set(6, 12, 8);
+    sol.castShadow = true;
+    sol.shadow.mapSize.set(2048, 2048);
+    Object.assign(sol.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10 });
+    sol.shadow.radius = 4;
+    cena.add(sol);
+
+    const m = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.75 });
+    function caixa(w, h, d, c, x, y, z, pai) {
+      const b = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, Math.min(0.05, Math.min(w, h, d) / 2.5)), m(c));
+      b.position.set(x, y + h / 2, z); b.castShadow = b.receiveShadow = true; pai.add(b); return b;
+    }
+
+    const CORES = [0x0038ef, 0xee4c01, 0x3f7d5a, 0x7a4b8c];
+    const legendas = document.getElementById('legendas');
+    const atores = [];
+
+    Object.values(CONJUNTO).forEach((estilo, i) => {
+      // cada estilo num tablado de madeira, lado a lado na diagonal da tela
+      const base = new THREE.Group();
+      base.position.set((i - 1) * 3.6, 0, -(i - 1) * 3.6);
+      cena.add(base);
+      caixa(3.2, 0.3, 3.2, 0xb98552, 0, -0.3, 0, base);
+      caixa(3.3, 0.25, 3.3, 0x7f73a8, 0, -0.55, 0, base);
+
+      // mesinha com monitor para o "trabalhando"
+      caixa(1.0, 0.05, 0.55, 0xd9b48a, 0.75, 0.7, -0.55, base);
+      for (const [x, z] of [[0.3, -0.75], [1.2, -0.75], [0.3, -0.35], [1.2, -0.35]]) caixa(0.04, 0.7, 0.04, 0x2b2b33, x, 0, z, base);
+      caixa(0.5, 0.32, 0.04, 0x2b2b33, 0.75, 0.82, -0.72, base);
+      caixa(0.4, 0.42, 0.4, 0x2b2b33, 0.75, 0, 0.0, base);   // banquinho
+
+      const modos = [
+        { modo: 'andar', x: -0.8, z: 0.7, gira: true },
+        { modo: 'digitar', x: 0.75, z: 0.05, olhar: Math.PI, y: 0.18 },
+        { modo: 'esperar', x: -0.8, z: -0.7, olhar: 0.6 },
+        { modo: 'descansar', x: 0.8, z: 1.0, olhar: 0.9 },
+      ];
+      modos.forEach((md, j) => {
+        const p = estilo.criar(CORES[j], 7 + i * 13 + j * 101);
+        p.scale.setScalar(1.15);
+        p.position.set(md.x, md.y || 0, md.z);
+        p.rotation.y = md.olhar ?? 0;
+        p.traverse(o => { if (o.isMesh) o.castShadow = true; });
+        base.add(p);
+        atores.push({ p, ...md });
+      });
+
+      const div = document.createElement('div');
+      const b = document.createElement('b'); b.textContent = estilo.nome;
+      const s = document.createElement('span'); s.textContent = estilo.descricao;
+      div.append(b, s);
+      legendas.append(div);
+    });
+
+    function ajustar() {
+      const w = innerWidth, h = innerHeight, asp = w / h, meia = Math.max(3.0, 6.4 / asp);
+      Object.assign(camera, { left: -meia * asp, right: meia * asp, top: meia, bottom: -meia });
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    addEventListener('resize', ajustar); ajustar();
+
+    function loop(ms) {
+      const t = ms / 1000;
+      for (const a of atores) {
+        a.p.userData.animar(t, a.modo);
+        if (a.gira) a.p.rotation.y = t * 0.6;
+      }
+      renderer.render(cena, camera);
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

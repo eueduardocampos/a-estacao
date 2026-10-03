@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A Estação</title>
+  <link rel="icon" href="icone-64.png">
+  <link rel="apple-touch-icon" href="icone-180.png">
+  <meta name="theme-color" content="#030870">
+  <!-- Figtree local (licença OFL, pacote @fontsource/figtree): nada sai da máquina -->
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/600.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/700.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/800.css">
+  <style>
+    :root {
+      --navy: #030870;
+      --azul: #0038ef;
+      --laranja: #ee4c01;
+      --fundo-1: #d9d4ea;
+      --fundo-2: #a99fca;
+      /* padrão comum dos componentes HTML (cabeçalho, botão, rodapé, contador) */
+      --vidro: rgba(255,255,255,.86);
+      --sombra: 0 2px 8px rgba(3,8,112,.12);
+      --raio-cartao: 14px;
+      --raio-pilula: 999px;
+    }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      background: radial-gradient(ellipse at 50% 35%, var(--fundo-1), var(--fundo-2));
+      font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    #cena { position: fixed; inset: 0; transition: filter 1s; }
+    #rotulos { position: fixed; inset: 0; pointer-events: none; }
+
+    /* sem conexão com o servidor local: a cena perde um pouco de cor */
+    body.sem-conexao #cena { filter: saturate(.6) opacity(.85); }
+
+    /* cartão do astronauta (só no hover) */
+    .placa-agente {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      transform: translateY(-4px); white-space: nowrap;
+      opacity: 0; transition: opacity .2s; pointer-events: none;
+    }
+    .placa-agente.visivel { opacity: 1; }
+    .placa-agente .nome {
+      font-size: 12px; font-weight: 700; color: #fff;
+      padding: 1px 7px; border-radius: var(--raio-pilula);
+    }
+    .placa-agente .acao {
+      font-size: 11px; font-weight: 600; color: var(--navy);
+      background: rgba(255,255,255,.92); padding: 1px 6px; border-radius: 6px;
+    }
+    .placa-agente.sub .nome { font-size: 11px; opacity: .9; }
+    .placa-agente.esperando .acao { background: var(--laranja); color: #fff; }
+    /* na fila (sala do dono ou revisão) quem fala é a notinha: sem cartão do hover */
+    .placa-agente.em-fila { display: none; }
+
+    /* notinha da fila (rodada 6): pequena, no estilo do balão, ao lado do capacete.
+       A única coisa clicável da Estação: abre a sessão no app (servidor confere tudo).
+       O CSS2DRenderer escreve o transform do elemento: o lado sai do center do objeto
+       (agentes.js: 0 = à direita do capacete, 1 = à esquerda) e a folga, da margem. */
+    .notinha {
+      display: flex; align-items: center; gap: 4px; margin-left: 12px;
+      max-width: 140px; font-size: 10px; font-weight: 700; line-height: 1.2; color: var(--navy);
+      background: #fff; padding: 2px 7px 2px 5px; border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(3,8,112,.2);
+      white-space: nowrap; pointer-events: auto; cursor: default; user-select: none;
+      transition: background .15s, box-shadow .15s, opacity .2s;
+    }
+    .notinha.esquerda { margin-left: -12px; }
+    .notinha .ponto { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--laranja); }
+    .notinha.revisao .ponto { background: var(--azul); }
+    .notinha .texto { overflow: hidden; text-overflow: ellipsis; }
+    .notinha.abrivel { cursor: pointer; }
+    .notinha.abrivel:hover { background: #eef1ff; box-shadow: 0 1px 6px rgba(3,8,112,.28); }
+    .notinha.abrivel:focus-visible { outline: 2px solid var(--laranja); outline-offset: 1px; }
+    .notinha.abrindo { background: #eef1ff; }
+    .notinha.abrindo .texto, .notinha.falhou .texto { font-weight: 600; opacity: .8; }
+
+    /* "+N" na porta: recebe o ponteiro para o title aparecer */
+    .contador-fila {
+      font-size: 12px; font-weight: 800; color: #fff; background: var(--navy);
+      padding: 3px 9px; border-radius: var(--raio-pilula); box-shadow: var(--sombra);
+      pointer-events: auto; cursor: default; white-space: nowrap;
+    }
+
+    /* relógio do fim de trabalho: anel que enche de 0 a 1 pela variável --p */
+    .relogio {
+      --p: 0;
+      width: 16px; height: 16px; border-radius: 50%; position: relative;
+      background: conic-gradient(var(--azul) calc(var(--p) * 360deg), rgba(3,8,112,.15) 0);
+      box-shadow: 0 1px 3px rgba(3,8,112,.18);
+      pointer-events: none;
+    }
+    .relogio::after {
+      content: ''; position: absolute; inset: 3px; border-radius: 50%; background: #fff;
+    }
+
+    /* botões da câmera, no canto: "Ver a estação inteira" ao lado da "Exibição dinâmica" */
+    #botoes-camera {
+      position: fixed; top: 16px; right: 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .botao-pilula {
+      display: flex; align-items: center; gap: 8px;
+      font: 700 13px Figtree, -apple-system, sans-serif; color: var(--navy);
+      background: var(--vidro); border: 1px solid rgba(3,8,112,.15);
+      padding: 8px 14px; border-radius: var(--raio-pilula); cursor: pointer;
+      box-shadow: var(--sombra); transition: background .2s, color .2s;
+      white-space: nowrap;
+    }
+    .botao-pilula:hover { background: #fff; }
+    .botao-pilula:focus-visible { outline: 2px solid var(--laranja); outline-offset: 2px; }
+    .botao-pilula svg { flex: none; width: 14px; height: 14px; }
+    #zoom-inteligente .ponto { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #b9bcc6; transition: background .2s; }
+    #zoom-inteligente.ligado { background: var(--navy); color: #fff; }
+    /* seletor de duas opções (03/10): a escolhida fica preenchida em navy */
+    .segmentado {
+      display: flex; padding: 3px; gap: 2px; border-radius: var(--raio-pilula);
+      background: var(--vidro); border: 1px solid rgba(3,8,112,.15); box-shadow: var(--sombra);
+    }
+    .segmentado button {
+      font: 700 13px Figtree, -apple-system, sans-serif; color: var(--navy); white-space: nowrap;
+      background: transparent; border: 0; padding: 5px 12px; border-radius: var(--raio-pilula);
+      cursor: pointer; transition: background .2s, color .2s; opacity: .65;
+    }
+    .segmentado button:hover { opacity: 1; background: rgba(3,8,112,.06); }
+    .segmentado button[aria-checked="true"] { background: var(--navy); color: #fff; opacity: 1; }
+    .segmentado button:focus-visible { outline: 2px solid var(--laranja); outline-offset: 2px; }
+    #zoom-inteligente.ligado .ponto { background: var(--laranja); box-shadow: 0 0 6px var(--laranja); }
+
+    /* Novidades (versão e atualização): pílula pequena no canto de baixo, painel por cima */
+    #novidades {
+      position: fixed; bottom: 14px; left: 20px;
+      font-size: 12px; padding: 6px 12px; gap: 6px;
+    }
+    #painel-novidades .verificar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0 4px; }
+    #painel-novidades .verificar .quando { font-size: 11.5px; opacity: .7; }
+    #painel-novidades .botao-verificar {
+      font: 700 12px Figtree, -apple-system, sans-serif; color: #fff; background: var(--navy);
+      border: 0; border-radius: 999px; padding: 6px 12px; cursor: pointer;
+    }
+    #painel-novidades .botao-verificar:disabled { opacity: .6; cursor: default; }
+    #painel-novidades .botao-verificar:focus-visible { outline: 2px solid var(--laranja); outline-offset: 2px; }
+    #novidades:hover, #novidades[aria-expanded="true"] { opacity: 1; }
+    #novidades .ponto { display: none; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--azul); }
+    #novidades.tem-nova .ponto { display: block; }
+    #painel-novidades {
+      position: fixed; bottom: 46px; left: 20px; z-index: 5;
+      width: min(340px, calc(100vw - 32px)); max-height: min(440px, calc(100vh - 140px));
+      overflow-x: hidden; overflow-y: auto; overflow-wrap: anywhere;
+      color: var(--navy); background: rgba(255,255,255,.97); border-radius: var(--raio-cartao);
+      box-shadow: 0 6px 24px rgba(3,8,112,.18); padding: 14px 16px; font-size: 12px; line-height: 1.4;
+    }
+    #painel-novidades[hidden] { display: none; }
+    #painel-novidades h2 { margin: 0 0 2px; font-size: 15px; font-weight: 800; }
+    #painel-novidades .versao-local { font-size: 11px; opacity: .7; }
+    #painel-novidades .estado { margin: 10px 0 0; font-weight: 700; }
+    #painel-novidades .estado.nova { color: var(--azul); }
+    #painel-novidades h3 { margin: 12px 0 4px; font-size: 12px; font-weight: 800; }
+    #painel-novidades .release { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid rgba(3,8,112,.1); }
+    #painel-novidades .release .titulo { font-weight: 800; }
+    #painel-novidades .release .data { font-weight: 600; opacity: .6; margin-left: 4px; }
+    #painel-novidades ul, #painel-novidades ol { margin: 4px 0 0; padding-left: 18px; }
+    #painel-novidades li { margin: 1px 0; }
+    #painel-novidades p { margin: 4px 0 0; }
+    #painel-novidades code, #painel-novidades .comando code {
+      font: 600 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    #painel-novidades .comando {
+      display: flex; align-items: center; gap: 6px; margin-top: 6px;
+      background: #f1f2f9; border-radius: 8px; padding: 6px 6px 6px 8px;
+    }
+    #painel-novidades .comando code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; }
+    #painel-novidades .copiar { font-size: 11px; padding: 3px 9px; box-shadow: none; }
+    #painel-novidades .fechar {
+      position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border: 0; border-radius: 50%;
+      background: transparent; color: var(--navy); font: 700 16px Figtree, -apple-system, sans-serif; cursor: pointer;
+    }
+    #painel-novidades .fechar:hover { background: #f1f2f9; }
+    #painel-novidades .fechar:focus-visible { outline: 2px solid var(--laranja); }
+    #painel-novidades a { color: var(--azul); }
+
+    /* balão de pensamento. O CSS2DRenderer escreve o transform do elemento (centraliza
+       no ponto acima do capacete): o deslocamento para cima e para a direita sai das
+       margens, que ele não toca */
+    .balao {
+      position: relative; margin: -14px 0 0 10px;
+      max-width: 170px; font-size: 9px; font-weight: 600; line-height: 1.25; color: var(--navy);
+      background: #fff; padding: 3px 7px; border-radius: 9px;
+      box-shadow: 0 1px 4px rgba(3,8,112,.18);
+      opacity: 0; transition: opacity .25s; pointer-events: none; white-space: normal; text-align: left;
+    }
+    .balao.sub { font-size: 8px; }
+    .balao.visivel { opacity: .95; }
+    /* bolinhas de pensamento */
+    .balao::before, .balao::after {
+      content: ''; position: absolute; background: #fff; border-radius: 50%;
+      box-shadow: 0 1px 2px rgba(3,8,112,.15);
+    }
+    .balao::before { width: 6px; height: 6px; left: 2px; bottom: -6px; }
+    .balao::after { width: 3px; height: 3px; left: -2px; bottom: -10px; }
+
+    #cabecalho {
+      position: fixed; top: 16px; left: 20px;
+      color: var(--navy); pointer-events: none;
+      background: var(--vidro); padding: 8px 14px; border-radius: var(--raio-cartao);
+      box-shadow: var(--sombra);
+    }
+    #cabecalho .pasta { font-size: 20px; font-weight: 800; }
+    #cabecalho .resumo { font-size: 13px; font-weight: 600; opacity: .75; margin-top: 2px; }
+    #resumo .espera { color: var(--laranja); }
+    .cabecalho-linha2 { font-size: 12px; opacity: .7; }
+
+    /* rodapé de ajuda: o JS esmaece com .some; o "?" mostra de novo no hover */
+    #aviso {
+      position: fixed; bottom: 14px; right: 46px; font-size: 11px; color: var(--navy);
+      background: var(--vidro); padding: 4px 10px; border-radius: var(--raio-pilula);
+      box-shadow: var(--sombra); white-space: nowrap; pointer-events: none;
+      transition: opacity 1s;
+    }
+    #aviso.some { opacity: 0; }
+    #ajuda {
+      position: fixed; bottom: 14px; right: 20px;
+      width: 18px; height: 18px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800; color: var(--navy);
+      background: var(--vidro); box-shadow: var(--sombra);
+      opacity: .55; cursor: default; user-select: none; transition: opacity .2s;
+    }
+    #ajuda:hover { opacity: 1; }
+    #ajuda:hover ~ #aviso { opacity: 1; transition: opacity .2s; }
+
+    /* janela estreita: cabeçalho numa linha só, botão compacto, sem rodapé */
+    @media (max-width: 720px) {
+      #cabecalho {
+        top: 12px; left: 12px; padding: 6px 12px;
+        display: flex; align-items: baseline; gap: 8px;
+        max-width: calc(100vw - 24px - 190px);
+        white-space: nowrap; overflow: hidden;
+        font-size: 15px;
+      }
+      #cabecalho .pasta { font-size: 15px; flex: none; }
+      #cabecalho .resumo {
+        font-size: 15px; margin-top: 0; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis;
+      }
+      #cabecalho .cabecalho-linha2 { display: none; }
+      #botoes-camera { top: 12px; right: 12px; gap: 6px; }
+      .botao-pilula { padding: 7px 11px; gap: 6px; font-size: 12px; }
+      /* estreito: "Ver a estação inteira" fica só com o ícone (o nome segue no aria-label) */
+      #ver-inteira .rotulo { display: none; }
+      .segmentado button { padding: 6px 9px; font-size: 11px; }
+      #novidades { left: 12px; bottom: 12px; }
+      #painel-novidades { left: 12px; bottom: 44px; }
+      #aviso, #ajuda { display: none; }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./node_modules/three/build/three.module.js",
+        "three/addons/": "./node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="cena"></div>
+  <div id="rotulos"></div>
+  <div id="cabecalho">
+    <div class="pasta" id="pasta">A Estação</div>
+    <div class="resumo" id="resumo">carregando…</div>
+  </div>
+  <div id="botoes-camera">
+    <div id="modo-visao" class="segmentado" role="radiogroup" aria-label="Quem aparece como astronauta">
+      <button type="button" role="radio" data-modo="sessoes" aria-checked="false" title="Só as sessões viram astronautas">Só sessões</button>
+      <button type="button" role="radio" data-modo="todos" aria-checked="true" title="Sessões, ajudantes, agentes de workflow e tarefas em segundo plano">Sessões e ajudantes</button>
+    </div>
+    <button id="ver-inteira" class="botao-pilula" type="button" aria-label="Ver a estação inteira" title="Mostra a estação toda; a câmera fica livre até você clicar em Exibição dinâmica"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg><span class="rotulo">Ver a estação inteira</span></button>
+    <button id="zoom-inteligente" class="botao-pilula" type="button" aria-pressed="true"><span class="ponto"></span><span class="rotulo">Exibição dinâmica</span></button>
+  </div>
+  <button id="novidades" class="botao-pilula" type="button" aria-expanded="false" aria-controls="painel-novidades"><span class="ponto"></span><span class="rotulo">Atualizações</span></button>
+  <section id="painel-novidades" role="dialog" aria-label="Novidades da Estação" hidden></section>
+  <div id="ajuda" aria-label="Ajuda">?</div>
+  <div id="aviso">Arraste para passear · roda ou pinça para zoom · passe o mouse num astronauta</div>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

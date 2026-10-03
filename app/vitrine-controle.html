@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Salas de controle · A Estação</title>
+  <link rel="icon" href="icone-64.png">
+  <meta name="theme-color" content="#030870">
+  <!-- Figtree local (licença OFL, pacote @fontsource/figtree): nada sai da máquina -->
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/500.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/600.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/700.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/800.css">
+  <style>
+    :root { --navy: #030870; --azul: #0038ef; --laranja: #ee4c01; --fundo-1: #ddd8ec; --fundo-2: #ada3cc; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      background: radial-gradient(ellipse at 50% 35%, var(--fundo-1), var(--fundo-2));
+      font-family: Figtree, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--navy);
+    }
+    #cena { position: fixed; inset: 0; }
+    header { position: fixed; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; pointer-events: none; }
+    .cartao { background: rgba(255,255,255,.88); border-radius: 12px; padding: 10px 14px; box-shadow: 0 2px 10px rgba(3,8,112,.08); }
+    h1 { margin: 0; font-size: 18px; font-weight: 800; }
+    header p { margin: 2px 0 0; font-size: 12px; font-weight: 600; opacity: .7; }
+    button {
+      pointer-events: auto; font: 700 12px Figtree, -apple-system, sans-serif; color: #fff; background: var(--navy);
+      border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer;
+    }
+    button[aria-pressed="true"] { background: var(--azul); }
+    #legendas { position: fixed; bottom: 16px; left: 16px; right: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; pointer-events: none; }
+    #legendas .cartao { font-size: 12px; font-weight: 600; }
+    #legendas b { display: block; font-size: 15px; font-weight: 800; }
+    #legendas .acao { opacity: .75; }
+    .ponto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+    @media (max-width: 560px) {
+      header { flex-direction: column; }
+      #legendas { grid-template-columns: 1fr; }
+    }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="cena"></div>
+  <header>
+    <div class="cartao">
+      <h1>Salas de controle</h1>
+      <p>Sala Anthropic e Sala OpenAI, com o operador de cada uma em ação</p>
+    </div>
+    <button id="faixas" aria-pressed="false">Ver as três faixas</button>
+  </header>
+  <div id="legendas"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { MapControls } from 'three/addons/controls/MapControls.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+    import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+    import { montarSalaControle, dadosExemplo, PROVEDORES, SALA } from './controle.js';
+    // Figtree local: espera as espessuras usadas antes de desenhar placas e telas (no máximo 2 s)
+    try { await Promise.race([Promise.all(['500', '600', '700', '800'].map(p => document.fonts.load(p + ' 40px Figtree', 'Áa'))), new Promise(r => setTimeout(r, 2000))]); } catch { /* segue com a fonte do sistema */ }
+
+    const params = new URLSearchParams(location.search);
+    const LADO = params.get('lado') === 'n' ? 'n' : 's';
+    const FOCO = params.get('foco');
+
+    // renderer e luz no mesmo acerto da Estação (cena.js)
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.getElementById('cena').appendChild(renderer.domElement);
+
+    const cena = new THREE.Scene();
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    cena.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    cena.environmentIntensity = 0.45;
+    cena.add(new THREE.HemisphereLight(0xfff3e2, 0x7d73a6, 0.5));
+    const sol = new THREE.DirectionalLight(0xffe2c0, 2.2);
+    sol.position.copy(new THREE.Vector3(26 * 0.35, 22, 14).normalize().multiplyScalar(30));
+    sol.castShadow = true;
+    sol.shadow.mapSize.set(2048, 2048);
+    sol.shadow.radius = 3;
+    sol.shadow.bias = -0.0004;
+    Object.assign(sol.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 70 });
+    cena.add(sol);
+
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+    const controles = new MapControls(camera, renderer.domElement);
+    controles.enableRotate = false;
+    controles.enableDamping = true;
+    controles.zoomSpeed = 1.2;
+
+    // base lilás e corredor com passadeira, como na espinha da Estação
+    const W = SALA.largura, D = SALA.profundidade, CORR = 1.2;
+    const m = (c, extra = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, ...extra });
+    function bloco(w, h, d, c, x, y, z, sombra = false) {
+      const b = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(0.05, Math.min(w, h, d) / 2.5)), m(c));
+      b.position.set(x, y + h / 2, z); b.receiveShadow = true; b.castShadow = sombra; cena.add(b); return b;
+    }
+    const zSala = LADO === 's' ? CORR + D / 2 : -CORR - D / 2;
+    const largura = W * 2;
+    bloco(largura + 0.6, 0.7, D + CORR * 2 + 0.6, 0x7f73a8, 0, -0.8, zSala + (LADO === 's' ? -CORR : CORR));
+    bloco(largura + 0.3, 0.06, D + CORR * 2 + 0.3, 0xece6f4, 0, -0.12, zSala + (LADO === 's' ? -CORR : CORR));
+    // corredor (piso claro) e passadeira laranja-tijolo
+    const zCorr = LADO === 's' ? 0 : 0;
+    bloco(largura, 0.06, CORR * 2, 0xe9e1d3, 0, -0.06, zCorr);
+    bloco(largura - 0.2, 0.012, 0.7, 0xc8573a, 0, 0.0, zCorr);
+
+    // as duas salas lado a lado (Anthropic à esquerda)
+    const salas = {};
+    const dados = dadosExemplo();
+    [['anthropic', -W / 2], ['openai', W / 2]].forEach(([prov, x]) => {
+      const s = montarSalaControle(prov, { casca: LADO });
+      s.position.set(x, 0, zSala);
+      cena.add(s);
+      s.userData.definirDados(dados[prov]);
+      salas[prov] = s;
+    });
+    // divisória do fim da fileira (lado direito da Sala OpenAI)
+    bloco(0.14, 0.9, D, 0xf3efe8, W, 0, zSala, true);
+
+    // câmera isométrica, igual à da Estação
+    const alvo = FOCO
+      ? new THREE.Vector3(FOCO === 'openai' ? W / 2 : -W / 2, 1.1, zSala - 1.3)
+      : new THREE.Vector3(0, 0.7, zSala - 0.6);
+    camera.position.copy(alvo).add(new THREE.Vector3(30, 27, 30));
+    camera.lookAt(alvo);
+    controles.target.copy(alvo);
+    const MEIA = FOCO ? 3.4 : 5.4;
+    function ajustar() {
+      const w = innerWidth, h = innerHeight, asp = w / h;
+      const meia = Math.max(MEIA, (MEIA * 1.55) / asp);
+      Object.assign(camera, { left: -meia * asp, right: meia * asp, top: meia, bottom: -meia });
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    addEventListener('resize', ajustar);
+    ajustar();
+
+    // legendas com a ação de cada operador, ao vivo
+    const NOMES = {
+      olhar: 'olhando o painel', apontar: 'apontando um medidor', digitar: 'digitando no console',
+      cafe: 'tomando café', prancheta: 'conferindo a prancheta', alongar: 'se alongando',
+    };
+    const LUGARES = { painelEsq: 'o painel', painelDir: 'o painel', lateral: 'a tela do relógio', console: 'o console', cafe: 'o café', prancheta: 'a prancheta' };
+    const legendas = document.getElementById('legendas');
+    const linhas = {};
+    for (const prov of ['anthropic', 'openai']) {
+      const P = PROVEDORES[prov];
+      const c = document.createElement('div');
+      c.className = 'cartao';
+      const b = document.createElement('b');
+      const p = document.createElement('span'); p.className = 'ponto'; p.style.background = P.css;
+      b.append(p, document.createTextNode(P.sala));
+      const a = document.createElement('div'); a.className = 'acao';
+      c.append(b, a);
+      legendas.append(c);
+      linhas[prov] = a;
+    }
+    function legendar() {
+      for (const prov of ['anthropic', 'openai']) {
+        const e = salas[prov].userData.operador.estado();
+        linhas[prov].textContent = 'Operador: ' + (e.fase === 'andando' ? 'indo até ' + (LUGARES[e.ponto] || 'outro ponto') : (NOMES[e.acao] || 'de olho'));
+      }
+    }
+
+    // demonstração das faixas: tranquilo, atenção e crítico
+    const CENARIOS = [
+      { a: [11, 14, 0], o: [15] },
+      { a: [68, 47, 12], o: [72] },
+      { a: [93, 86, 61], o: [96] },
+    ];
+    let demo = params.get('demo') === 'faixas', cenario = 0, ultimoCenario = 0;
+    const botao = document.getElementById('faixas');
+    function aplicarCenario(i) {
+      const d = dadosExemplo();
+      d.anthropic.medidores.forEach((mm, k) => { mm.pct = CENARIOS[i].a[k]; });
+      d.openai.medidores.forEach((mm, k) => { mm.pct = CENARIOS[i].o[k]; });
+      salas.anthropic.userData.definirDados(d.anthropic);
+      salas.openai.userData.definirDados(d.openai);
+    }
+    botao.addEventListener('click', () => {
+      demo = !demo;
+      botao.setAttribute('aria-pressed', String(demo));
+      botao.textContent = demo ? 'Voltar aos dados de exemplo' : 'Ver as três faixas';
+      cenario = 0;
+      aplicarCenario(0);
+    });
+    // ?cenario=0|1|2: fixa um dos cenários das faixas (prints)
+    if (params.has('cenario')) aplicarCenario(Math.min(2, Math.max(0, Number(params.get('cenario')) || 0)));
+    if (demo) { botao.setAttribute('aria-pressed', 'true'); botao.textContent = 'Voltar aos dados de exemplo'; }
+
+    // laço: rAF quando a aba está visível; com a aba oculta (painel de navegador), setTimeout
+    let anterior = performance.now(), ultimaLegenda = 0;
+    function passo(dt) {
+      for (const s of Object.values(salas)) s.userData.atualizar(dt);
+      const agora = performance.now();
+      if (demo && agora - ultimoCenario > 3500) { ultimoCenario = agora; cenario = (cenario + 1) % CENARIOS.length; aplicarCenario(cenario); }
+      if (agora - ultimaLegenda > 300) { ultimaLegenda = agora; legendar(); }
+    }
+    function quadro() {
+      const agora = performance.now();
+      const dt = Math.min(0.1, (agora - anterior) / 1000);
+      anterior = agora;
+      passo(dt);
+      controles.update();
+      renderer.render(cena, camera);
+      if (document.hidden) setTimeout(quadro, 33); else requestAnimationFrame(quadro);
+    }
+    // ?t=segundos: adianta a rotina dos operadores (prints em momentos diferentes)
+    if (Number(params.get('t')) > 0) { for (let t = 0; t < Number(params.get('t')); t += 1 / 30) passo(1 / 30); }
+    quadro();
+
+    // para conferência pelo console: avança a simulação sem esperar o relógio
+    window.vitrine = {
+      salas, camera, renderer,
+      avancar(seg, passoS = 1 / 30) { for (let t = 0; t < seg; t += passoS) passo(passoS); renderer.render(cena, camera); return this.estados(); },
+      estados: () => Object.fromEntries(Object.entries(salas).map(([k, s]) => [k, s.userData.operador.estado()])),
+      cenario: i => aplicarCenario(i),
+    };
+  </script>
+</body>
+</html>

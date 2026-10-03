@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Formatos da Estação · protótipo v0.7</title>
+  <link rel="icon" href="icone-64.png">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/600.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/700.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/800.css">
+  <style>
+    :root { --navy: #030870; --azul: #0038ef; --laranja: #ee4c01; --fundo: #d9d4ea; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body { background: radial-gradient(ellipse at 50% 30%, #e4e0f0, #b9b0d6); font-family: Figtree, -apple-system, sans-serif; color: var(--navy); display: flex; flex-direction: column; }
+    header { padding: 14px 20px 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; }
+    h1 { margin: 0; font-size: 19px; font-weight: 800; }
+    header p { margin: 2px 0 0; font-size: 12.5px; font-weight: 600; opacity: .72; max-width: 620px; }
+    .controle { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.85); padding: 8px 14px; border-radius: 999px; box-shadow: 0 2px 8px rgba(3,8,112,.12); font-weight: 700; font-size: 13px; }
+    .controle input { width: 220px; accent-color: var(--navy); }
+    .controle output { min-width: 112px; font-weight: 800; }
+    main { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; padding: 4px 16px 16px; min-height: 0; }
+    .quadro { position: relative; background: rgba(255,255,255,.35); border-radius: 16px; overflow: hidden; border: 2px solid transparent; transition: border-color .3s, background .3s; min-height: 0; }
+    .quadro.escolhido { border-color: var(--laranja); background: rgba(255,255,255,.6); }
+    .quadro canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    .rotulo { position: absolute; left: 12px; top: 10px; background: rgba(255,255,255,.9); border-radius: 12px; padding: 7px 11px; box-shadow: 0 2px 6px rgba(3,8,112,.1); pointer-events: none; }
+    .rotulo b { font-size: 14px; font-weight: 800; display: block; }
+    .rotulo span { font-size: 11.5px; font-weight: 600; opacity: .75; }
+    .selo { position: absolute; right: 12px; top: 10px; background: var(--laranja); color: #fff; font-size: 11.5px; font-weight: 800; padding: 5px 10px; border-radius: 999px; display: none; }
+    .quadro.escolhido .selo { display: block; }
+    @media (max-width: 760px) {
+      main { grid-template-columns: 1fr; grid-template-rows: repeat(4, minmax(220px, 1fr)); overflow: auto; }
+      .controle input { width: 140px; }
+    }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Formatos da Estação · protótipo da v0.7</h1>
+      <p>Mesma quantidade de salas nos quatro formatos. O contorno laranja é o que a Estação escolheria sozinha: o formato em que os astronautas aparecem maiores na tela, preferindo o mais simples quando a diferença é pequena.</p>
+    </div>
+    <label class="controle">Astronautas <input id="qtd" type="range" min="1" max="150" value="40"><output id="qtdTexto"></output></label>
+  </header>
+  <main>
+    <section class="quadro" data-formato="reta"><canvas></canvas><div class="rotulo"><b>Corredor reto</b><span></span></div><div class="selo">a Estação escolheria este</div></section>
+    <section class="quadro" data-formato="L"><canvas></canvas><div class="rotulo"><b>Corredor em L</b><span></span></div><div class="selo">a Estação escolheria este</div></section>
+    <section class="quadro" data-formato="U"><canvas></canvas><div class="rotulo"><b>Corredor em U</b><span></span></div><div class="selo">a Estação escolheria este</div></section>
+    <section class="quadro" data-formato="praca"><canvas></canvas><div class="rotulo"><b>Praça no centro</b><span></span></div><div class="selo">a Estação escolheria este</div></section>
+  </main>
+  <script type="module">
+    import * as THREE from 'three';
+
+    // Medidas da Estação de verdade (estacao.js): vaga de 4,6 m ao longo do corredor,
+    // sala de 6,8 m de fundo, corredor de 2,4 m
+    const W = 4.6, D = 6.8, C = 2.4;
+    const CAPACETE = 0.84;   // diâmetro do capacete na escala 1,45
+    const COR = {
+      piso: 0xe9dcc6, nucleo: 0xd8c3a2, tecnica: 0xc9ccd4, pasta: 0xe2c9a0, descanso: 0xb9cfa8,
+      sob: 0xd6b083, enchimento: 0xc9d4b0, corredor: 0x336699, parede: 0xf3efe8, base: 0x9d8fc4,
+      astronauta: 0xffffff, mochila: 0x0038ef,
+    };
+
+    // Quantas salas a Estação pede para N astronautas: núcleo e ala técnica fixos (8) e
+    // mais ~1 sala de pasta para cada 5 astronautas, com MCP/API/pesquisa a partir de 15
+    function salasPara(n) {
+      const pastas = Math.max(1, Math.ceil(n / 5));
+      const extras = n >= 15 ? 3 : n >= 6 ? 1 : 0;
+      return { fixas: 8, pastas, extras, total: 8 + pastas + extras };
+    }
+    // Tipo de cada sala, em ordem (as primeiras ficam perto da porta/centro)
+    function tipos(s) {
+      const t = ['nucleo', 'nucleo', 'descanso', 'nucleo', 'tecnica', 'tecnica', 'tecnica', 'nucleo'];
+      for (let i = 0; i < s.extras; i++) t.push('sob');
+      for (let i = 0; i < s.pastas; i++) t.push('pasta');
+      return t;
+    }
+
+    // Cada formato devolve { salas: [{ x, z, w, d }], corredores: [{ x, z, w, d }] } em metros
+    const sala = (x, z, w, d) => ({ x, z, w, d });
+    function reta(n) {
+      const k = Math.ceil(n / 2), salas = [], corredores = [];
+      for (let i = 0; i < n; i++) {
+        const j = Math.floor(i / 2), norte = i % 2 === 0;
+        salas.push(sala(-(j + 0.5) * W, norte ? -(C / 2 + D / 2) : C / 2 + D / 2, W, D));
+      }
+      corredores.push({ x: -k * W / 2 + 1, z: 0, w: k * W + 2, d: C });
+      return { salas, corredores };
+    }
+    function formatoL(n) {
+      const n1 = Math.ceil(n / 2) + (Math.ceil(n / 2) % 2), n2 = n - n1;
+      const a = reta(n1), k1 = Math.ceil(n1 / 2);
+      const xc = -k1 * W - C / 2, z0 = C / 2 + D;   // segundo trecho desce (+z) depois da fileira de baixo
+      const salas = [...a.salas], corredores = [...a.corredores];
+      const k2 = Math.ceil(n2 / 2);
+      for (let i = 0; i < n2; i++) {
+        const j = Math.floor(i / 2), oeste = i % 2 === 0;
+        salas.push(sala(oeste ? xc - C / 2 - D / 2 : xc + C / 2 + D / 2, z0 + (j + 0.5) * W, D, W));
+      }
+      corredores[0] = { x: (-k1 * W - C) / 2 + 1, z: 0, w: k1 * W + C + 2, d: C };
+      if (n2) corredores.push({ x: xc, z: (z0 + k2 * W) / 2 - C / 4, w: C, d: z0 + k2 * W + C / 2 });
+      return { salas, corredores };
+    }
+    function formatoU(n) {
+      const n1 = Math.ceil(n / 2) + (Math.ceil(n / 2) % 2), n2 = n - n1;
+      const k = Math.max(Math.ceil(n1 / 2), Math.ceil(n2 / 2));
+      const zb = C + 2 * D, salas = [], corredores = [];
+      for (let i = 0; i < n1; i++) {
+        const j = Math.floor(i / 2), norte = i % 2 === 0;
+        salas.push(sala(-(j + 0.5) * W, norte ? -(C / 2 + D / 2) : C / 2 + D / 2, W, D));
+      }
+      for (let i = 0; i < n2; i++) {   // perna de baixo, voltando para a porta (salas de costas para a de cima)
+        const j = Math.floor(i / 2), norte = i % 2 === 0;
+        salas.push(sala(-(k - j - 0.5) * W, zb + (norte ? -(C / 2 + D / 2) : C / 2 + D / 2), W, D));
+      }
+      const xf = -k * W - C / 2;
+      corredores.push({ x: -k * W / 2 + 1, z: 0, w: k * W + 2, d: C });
+      corredores.push({ x: -k * W / 2, z: zb, w: k * W, d: C });
+      corredores.push({ x: xf, z: zb / 2, w: C, d: zb + C });
+      return { salas, corredores };
+    }
+    function praca(n) {
+      // as 4 primeiras salas do núcleo ficam nos quadrantes da praça; o resto vai nos 4 braços
+      const P = C + 2 * D, salas = [], corredores = [];
+      const q = D / 2 + C / 2;
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].slice(0, Math.min(4, n)).forEach(([sx, sz]) => salas.push(sala(sx * q, sz * q, D, D)));
+      const resto = Math.max(0, n - 4);
+      const porBraco = [0, 0, 0, 0];
+      for (let i = 0; i < resto; i++) porBraco[i % 4]++;
+      const bracos = [{ dx: -1, dz: 0 }, { dx: 0, dz: 1 }, { dx: 1, dz: 0 }, { dx: 0, dz: -1 }];
+      bracos.forEach((b, bi) => {
+        const m = porBraco[bi], k = Math.ceil(m / 2);
+        for (let i = 0; i < m; i++) {
+          const j = Math.floor(i / 2), lado = i % 2 === 0 ? -1 : 1;
+          const ao = P / 2 + (j + 0.5) * W;             // ao longo do braço
+          const lat = lado * (C / 2 + D / 2);           // de cada lado do corredor
+          salas.push(b.dx ? sala(b.dx * ao, lat, W, D) : sala(lat, b.dz * ao, D, W));
+        }
+        const comp = P / 2 + k * W;
+        if (b.dx) corredores.push({ x: b.dx * comp / 2, z: 0, w: comp, d: C });
+        else corredores.push({ x: 0, z: b.dz * comp / 2, w: C, d: comp });
+      });
+      return { salas, corredores };
+    }
+    const FORMATOS = { reta, L: formatoL, U: formatoU, praca };
+    const SIMPLES = ['reta', 'L', 'U', 'praca'];
+
+    // Uma cena por quadro
+    const quadros = [...document.querySelectorAll('.quadro')].map(el => {
+      const canvas = el.querySelector('canvas');
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+      const cena = new THREE.Scene();
+      cena.add(new THREE.HemisphereLight(0xffffff, 0xb9b0d6, 1.6));
+      const sol = new THREE.DirectionalLight(0xffffff, 1.6); sol.position.set(20, 40, 10); cena.add(sol);
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -500, 500);
+      camera.position.set(30, 27, 30); camera.lookAt(0, 0, 0);
+      const grupo = new THREE.Group(); cena.add(grupo);
+      return { el, canvas, renderer, cena, camera, grupo, formato: el.dataset.formato, info: el.querySelector('.rotulo span') };
+    });
+
+    const caixa = (g, w, h, d, cor, x, y, z) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: cor, roughness: 0.85 }));
+      m.position.set(x, y + h / 2, z); g.add(m); return m;
+    };
+    function limpar(g) { while (g.children.length) { const c = g.children.pop(); c.geometry?.dispose(); c.material?.dispose(); } }
+
+    function montar(q, n) {
+      const s = salasPara(n), t = tipos(s);
+      const planta = FORMATOS[q.formato](s.total);
+      limpar(q.grupo);
+      // base sob tudo
+      const caixaTotal = new THREE.Box3();
+      for (const r of [...planta.salas, ...planta.corredores]) caixaTotal.expandByPoint(new THREE.Vector3(r.x - r.w / 2, 0, r.z - r.d / 2)).expandByPoint(new THREE.Vector3(r.x + r.w / 2, 0, r.z + r.d / 2));
+      for (const c of planta.corredores) caixa(q.grupo, c.w, 0.05, c.d, COR.corredor, c.x, 0, c.z);
+      // astronautas distribuídos pelas salas de pasta e algumas outras
+      let restantes = n;
+      planta.salas.forEach((r, i) => {
+        const tipo = t[i] || 'enchimento';
+        caixa(q.grupo, r.w - 0.15, 0.06, r.d - 0.15, COR[tipo], r.x, 0, r.z);
+        // divisórias baixas nas bordas
+        caixa(q.grupo, r.w - 0.15, 0.6, 0.1, COR.parede, r.x, 0, r.z - r.d / 2 + 0.12);
+        caixa(q.grupo, 0.1, 0.6, r.d - 0.15, COR.parede, r.x - r.w / 2 + 0.12, 0, r.z);
+        const cabe = tipo === 'pasta' ? 5 : tipo === 'sob' ? 2 : tipo === 'descanso' ? 2 : 0;
+        const aqui = Math.min(cabe, restantes); restantes -= aqui;
+        for (let a = 0; a < aqui; a++) {
+          const ax = r.x + ((a % 3) - 1) * Math.min(1.2, r.w / 4), az = r.z + (Math.floor(a / 3) - 0.5) * Math.min(1.6, r.d / 4);
+          const corpo = new THREE.Mesh(new THREE.SphereGeometry(CAPACETE / 2, 12, 10), new THREE.MeshStandardMaterial({ color: COR.astronauta, roughness: 0.4 }));
+          corpo.position.set(ax, 1.25, az); q.grupo.add(corpo);
+          caixa(q.grupo, 0.36, 0.7, 0.36, COR.mochila, ax, 0.1, az);
+        }
+      });
+      // enquadrar a pegada no quadro
+      const largura = q.el.clientWidth, altura = q.el.clientHeight;
+      q.renderer.setSize(largura, altura, false);
+      const cam = q.camera;
+      cam.updateMatrixWorld();
+      const inv = cam.matrixWorldInverse;
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const x of [caixaTotal.min.x, caixaTotal.max.x]) for (const y of [0, 2.4]) for (const z of [caixaTotal.min.z, caixaTotal.max.z]) {
+        const v = new THREE.Vector3(x, y, z).applyMatrix4(inv);
+        x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+      }
+      const folga = 1.08, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      const escala = Math.min(largura / ((x1 - x0) * folga), altura / ((y1 - y0) * folga));   // pixels por metro
+      cam.left = cx - largura / 2 / escala; cam.right = cx + largura / 2 / escala;
+      cam.top = cy + altura / 2 / escala; cam.bottom = cy - altura / 2 / escala;
+      cam.updateProjectionMatrix();
+      q.renderer.render(q.cena, cam);
+      const px = CAPACETE * escala;
+      const comp = Math.round(Math.max(caixaTotal.max.x - caixaTotal.min.x, caixaTotal.max.z - caixaTotal.min.z));
+      q.px = px;
+      q.info.textContent = `${s.total} salas · ${comp} m no lado maior · capacete com ${px.toFixed(1)} px na tela`;
+      return px;
+    }
+
+    const qtd = document.getElementById('qtd'), qtdTexto = document.getElementById('qtdTexto');
+    function atualizar() {
+      const n = +qtd.value;
+      qtdTexto.textContent = `${n} astronauta${n === 1 ? '' : 's'}`;
+      const pxs = {};
+      for (const q of quadros) pxs[q.formato] = montar(q, n);
+      // escolha automática: o mais simples, a menos que um formato mais complexo deixe os
+      // astronautas pelo menos 20% maiores
+      let escolhido = 'reta';
+      for (const f of SIMPLES.slice(1)) if (pxs[f] > pxs[escolhido] * 1.2) escolhido = f;
+      for (const q of quadros) q.el.classList.toggle('escolhido', q.formato === escolhido);
+    }
+    qtd.addEventListener('input', atualizar);
+    addEventListener('resize', atualizar);
+    atualizar();
+  </script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+# A Estação: o que nunca vai para o repositório público.
+
+# Dependências (o npm install e o instalar.sh baixam de novo)
+node_modules/
+
+# App de dois cliques: é gerado pelo instalar.sh na máquina de quem clonou
+# e guarda o caminho da pasta de quem gerou
+*.app
+*.app/
+
+# Registros do servidor (podem citar nomes de sessões e de pastas)
+logs/
+*.log
+nohup.out
+
+# Material de trabalho interno (até decisão)
+backups/
+auditoria/
+referencias/
+publicacao/
+# gerador antigo do app (o instalar.sh substitui)
+criar-app.sh
+*.tgz
+*.zip
+
+# Especificação interna (tem nomes, pastas e serviços pessoais). Publicar só uma versão limpa em docs/
+/ESPECIFICACAO.md
+
+# Prints, gravações e imagens soltas na raiz (podem mostrar sessões reais)
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
+/*.heic
+/*.mov
+/*.mp4
+# ...menos o ícone, que o instalar.sh usa
+!/icone-1024.png
+
+# Dados pessoais ou da máquina: transcrições, sessões, configurações e segredos
+*.jsonl
+.claude/
+.codex/
+.claude.json
+.env
+.env.*
+*.pem
+*.key
+.vscode/
+.idea/
+
+# Sistema
+.DS_Store
+._*
+Icon?

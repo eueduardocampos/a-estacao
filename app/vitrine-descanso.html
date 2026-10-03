@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cantos de descanso · A Estação</title>
+  <link rel="icon" href="icone-64.png">
+  <meta name="theme-color" content="#030870">
+  <!-- Figtree local (licença OFL, pacote @fontsource/figtree): nada sai da máquina -->
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/600.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/700.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/800.css">
+  <style>
+    :root { --navy: #030870; --azul: #0038ef; --laranja: #ee4c01; --fundo-1: #d9d4ea; --fundo-2: #a99fca; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      background: radial-gradient(ellipse at 50% 35%, var(--fundo-1), var(--fundo-2));
+      font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--navy);
+    }
+    #cena { position: fixed; inset: 0; }
+    #rotulos { position: fixed; inset: 0; pointer-events: none; }
+    header {
+      position: fixed; top: 16px; left: 16px; max-width: calc(100vw - 32px);
+      background: rgba(255,255,255,.86); border-radius: 14px; padding: 10px 14px;
+      box-shadow: 0 2px 8px rgba(3,8,112,.12);
+    }
+    h1 { margin: 0; font-size: 18px; font-weight: 800; }
+    header p { margin: 2px 0 0; font-size: 12px; font-weight: 600; opacity: .7; }
+    nav { position: fixed; bottom: 16px; left: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+    nav a {
+      font-size: 13px; font-weight: 700; color: var(--navy); text-decoration: none;
+      background: rgba(255,255,255,.86); padding: 6px 12px; border-radius: 999px;
+      box-shadow: 0 2px 8px rgba(3,8,112,.12);
+    }
+    nav a.ativo { background: var(--navy); color: #fff; }
+    .legenda {
+      font-size: 12px; font-weight: 700; color: var(--navy); white-space: nowrap;
+      background: rgba(255,255,255,.9); padding: 2px 9px; border-radius: 999px;
+      box-shadow: 0 2px 6px rgba(3,8,112,.12);
+    }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="cena"></div>
+  <div id="rotulos"></div>
+  <header>
+    <h1>Cantos de descanso</h1>
+    <p>Fliperama, videogame, ioga e meditação, cada um com um astronauta usando</p>
+  </header>
+  <nav id="nav"></nav>
+  <script type="module">
+    import * as THREE from 'three';
+    import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+    import { E } from './estado.js';
+    import { iniciarCena, renderizar, ajustarSombra, ajustarTela, podarSombras } from './cena.js';
+    import { caixa, piso, planta, quadroFundo, COR } from './pecas.js';
+    import { criarAstronauta } from './personagens.js';
+    import { CANTOS, posicionarNoLugar, ESCALA_ASTRONAUTA } from './descompressao.js';
+    // Figtree local: espera as espessuras usadas antes de desenhar placas e telas (no máximo 2 s)
+    try { await Promise.race([Promise.all(['600', '700', '800'].map(p => document.fonts.load(p + ' 40px Figtree', 'Áa'))), new Promise(r => setTimeout(r, 2000))]); } catch { /* segue com a fonte do sistema */ }
+
+    const params = new URLSearchParams(location.search);
+    const foco = params.get('foco');               // fliperama | videogame | ioga | meditacao
+    const congelar = params.has('t') ? Number(params.get('t')) : null;   // ?t=12.5 congela o tempo (prints)
+
+    // Tablado: 4 células de 3 m lado a lado, parede no fundo e na lateral esquerda
+    const CEL = 3.0, N = 4, LARG = CEL * N, PROF = 3.4;
+    const X0 = -LARG / 2, ZF = -PROF / 2;
+    E.larguraMaxima = LARG; E.X0 = X0; E.X1 = -X0; E.ZN = ZF; E.ZS = -ZF;
+    iniciarCena(document.getElementById('cena'));
+    const cena = E.cena;
+
+    // base lilás, borda de madeira e piso
+    const base = new THREE.Group();
+    cena.add(base);
+    caixa(LARG + 0.3, 0.7, PROF + 0.3, COR.base, 0, -0.8, 0, base);
+    caixa(LARG + 0.1, 0.06, PROF + 0.1, COR.madeiraClara, 0, -0.12, 0, base);
+    const corPisos = [0xd6b083, 0xcfa77a, 0xd8c2a4, 0xd9b48a];
+    for (let i = 0; i < N; i++) piso(CEL, PROF, corPisos[i], X0 + CEL * (i + 0.5), 0, base);
+    // paredes baixas (fundo e lateral), em corte como no escritório
+    const ALT = 2.3, PAREDE = 0xeee7dc;
+    caixa(LARG + 0.12, ALT, 0.12, PAREDE, 0, 0, ZF - 0.06, base);
+    caixa(0.12, ALT, PROF, PAREDE, X0 - 0.06, 0, 0, base);
+    caixa(LARG, 0.08, 0.03, 0xe2d9ca, 0, 0, ZF + 0.015, base, { seg: 0 });   // rodapé
+    // divisórias baixas entre as células (só no chão, para separar os cantos)
+    for (let i = 1; i < N; i++) caixa(0.06, 0.03, PROF - 0.4, 0xe2d9ca, X0 + CEL * i, 0, 0.2, base, { seg: 0, sombra: false });
+    // quadrinhos na parede
+    quadroFundo(X0 + CEL * 1.5 - 0.95, 1.25, ZF, 0.5, 0.36, COR.areia, { arte: 'planeta', pai: base });
+    quadroFundo(X0 + CEL * 3.5 + 0.2, 1.1, ZF, 0.62, 0.42, COR.areia, { arte: 'campo', pai: base });
+
+    // os quatro cantos, de costas para a parede do fundo
+    const ordem = [
+      { tipo: 'fliperama', x: X0 + 0.72, z: -0.35, rot: Math.PI / 2 },   // encostado na parede lateral, de perfil para a câmera
+      { tipo: 'videogame', z: ZF + 0.84 },
+      { tipo: 'ioga', z: ZF + 0.78 },
+      { tipo: 'meditacao', z: ZF + 1.0 },
+    ];
+    const CORES_AGENTE = [0x0038ef, 0x3f7d5a, 0x7a4b8c, 0x5b7fb5, 0xc0503a, 0x2a8c8c, 0xb5852b];
+    const cantos = [], usos = [];
+    let nAgente = 0;
+    ordem.forEach((o, i) => {
+      const canto = CANTOS[o.tipo]();
+      canto.grupo.position.set(o.x ?? X0 + CEL * (i + 0.5), 0, o.z);
+      canto.grupo.rotation.y = o.rot ?? 0;
+      cena.add(canto.grupo);
+      canto.atualizarLugares();
+      cantos.push(canto);
+      // legenda no chão, na frente do canto
+      const div = document.createElement('div');
+      div.className = 'legenda';
+      div.textContent = canto.nome;
+      const rot = new CSS2DObject(div);
+      rot.position.set(X0 + CEL * (i + 0.5), 0.05, -ZF - 0.25);
+      cena.add(rot);
+      // um astronauta em cada lugar (o videogame fica em dupla)
+      for (const lugar of canto.lugares) {
+        const h = 11 + nAgente * 37;
+        const boneco = criarAstronauta(CORES_AGENTE[(nAgente * 3 + 1) % CORES_AGENTE.length], h, 'olhinhos');
+        boneco.scale.setScalar(ESCALA_ASTRONAUTA);
+        boneco.userData.astronauta = true;
+        posicionarNoLugar(boneco, lugar);
+        cena.add(boneco);
+        usos.push(canto.usar(lugar, boneco, { fase: nAgente * 1.7 }));
+        nAgente++;
+      }
+    });
+
+    // planta grande no canto da parede
+    planta(X0 + 0.4, ZF + 0.4, 1.0, COR.offWhite, 'folhaLarga', base);
+
+    podarSombras();
+    const pegada = new THREE.Box3().setFromObject(base);
+    ajustarSombra(pegada);
+
+    // enquadramento: tudo, ou só o canto pedido em ?foco=
+    const nav = document.getElementById('nav');
+    function enquadrar(tipo) {
+      const { camera, controles } = E;
+      let caixaFoco = new THREE.Box3(new THREE.Vector3(X0, 0, ZF), new THREE.Vector3(-X0, ALT, -ZF));
+      const c = cantos.find(k => k.tipo === tipo);
+      if (c) {
+        // pegada local girada para o mundo
+        const p = c.pegada;
+        caixaFoco = new THREE.Box3();
+        c.grupo.updateWorldMatrix(true, false);
+        for (const x of [p.x0 - 0.3, p.x1 + 0.3]) for (const z of [p.z0 - 0.3, p.z1 + 0.3]) for (const y of [0, 1.9])
+          caixaFoco.expandByPoint(new THREE.Vector3(x, y, z).applyMatrix4(c.grupo.matrixWorld));
+      }
+      const centro = caixaFoco.getCenter(new THREE.Vector3());
+      centro.y = c ? 0.6 : 0.4;
+      camera.position.set(centro.x + 30, centro.y + 27, centro.z + 30);
+      camera.lookAt(centro);
+      camera.updateMatrixWorld();
+      // extensão da caixa vista pela câmera
+      const inv = camera.matrixWorldInverse;
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const x of [caixaFoco.min.x, caixaFoco.max.x]) for (const y of [caixaFoco.min.y - (c ? 0 : 0.8), caixaFoco.max.y]) for (const z of [caixaFoco.min.z, caixaFoco.max.z]) {
+        const v = new THREE.Vector3(x, y, z).applyMatrix4(inv);
+        x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+      }
+      const larguraTela = camera.right - camera.left, alturaTela = camera.top - camera.bottom;
+      camera.zoom = Math.min(larguraTela / ((x1 - x0) * 1.08), alturaTela / ((y1 - y0) * (c ? 1.12 : 1.25)));
+      camera.updateProjectionMatrix();
+      // centraliza o que foi medido (desloca câmera e alvo no plano da tela)
+      const desvio = new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, 0).applyQuaternion(camera.quaternion);
+      camera.position.add(desvio);
+      centro.add(desvio);
+      controles.target.copy(centro);
+      controles.update();
+      for (const a of nav.children) a.classList.toggle('ativo', (a.dataset.tipo || '') === (tipo || ''));
+      E.sujo = true;
+    }
+    for (const [tipo, nome] of [['', 'Todos'], ['fliperama', 'Fliperama'], ['videogame', 'Videogame'], ['ioga', 'Ioga'], ['meditacao', 'Meditação']]) {
+      const a = document.createElement('a');
+      a.href = tipo ? `?foco=${tipo}` : '?';
+      a.dataset.tipo = tipo;
+      a.textContent = nome;
+      a.addEventListener('click', ev => { ev.preventDefault(); history.replaceState(null, '', a.href); enquadrar(tipo); });
+      nav.append(a);
+    }
+    ajustarTela();
+    enquadrar(foco);
+    addEventListener('resize', () => enquadrar(new URLSearchParams(location.search).get('foco')));
+
+    // laço: anima astronautas e peças; sombra recalculada a cada quadro (vitrine pequena)
+    let anterior = performance.now();
+    function quadro(ms) {
+      requestAnimationFrame(quadro);
+      const dt = Math.min(0.1, (ms - anterior) / 1000);
+      anterior = ms;
+      const t = congelar ?? ms / 1000;
+      for (const u of usos) u?.quadro(t, congelar != null ? 1 : dt);
+      for (const c of cantos) c.atualizar(t, dt);
+      E.sombraSuja = true;
+      renderizar();
+    }
+    requestAnimationFrame(quadro);
+    window.vitrine = { cantos, usos, enquadrar };
+  </script>
+</body>
+</html>

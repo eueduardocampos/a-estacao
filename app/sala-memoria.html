@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Biblioteca da memória · A Estação</title>
+  <link rel="icon" href="icone-64.png">
+  <meta name="theme-color" content="#030870">
+  <!-- Figtree local (licença OFL, pacote @fontsource/figtree): nada sai da máquina -->
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/600.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/700.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/800.css">
+  <style>
+    :root { --navy: #030870; --fundo-1: #e6dccb; --fundo-2: #b9a98f; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      background: radial-gradient(ellipse at 50% 35%, var(--fundo-1), var(--fundo-2));
+      font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--navy);
+    }
+    #cena { position: fixed; inset: 0; }
+    #rotulos { position: fixed; inset: 0; pointer-events: none; }
+    header {
+      position: fixed; top: 16px; left: 16px; max-width: calc(100vw - 32px);
+      background: rgba(255,255,255,.86); border-radius: 14px; padding: 10px 14px;
+      box-shadow: 0 2px 8px rgba(3,8,112,.12);
+    }
+    h1 { margin: 0; font-size: 18px; font-weight: 800; }
+    header p { margin: 2px 0 0; font-size: 12px; font-weight: 600; opacity: .7; }
+    header p.agora { opacity: 1; color: #0038ef; }
+    header p.agora.gravar { color: #ee4c01; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="cena"></div>
+  <div id="rotulos"></div>
+  <header>
+    <h1>Biblioteca da memória</h1>
+    <p id="resumo">lendo as estantes…</p>
+    <p id="agora" class="agora" hidden></p>
+  </header>
+  <script type="module">
+    import * as THREE from 'three';
+    import { E } from './estado.js';
+    import { iniciarCena, renderizar, ajustarSombra, ajustarTela, podarSombras } from './cena.js';
+    import { caixa, COR } from './pecas.js';
+    import { montarSalaMemoria } from './sala-memoria.js';
+    // Figtree local: espera as espessuras usadas antes de desenhar placas e telas (no máximo 2 s)
+    try { await Promise.race([Promise.all(['600', '700', '800'].map(p => document.fonts.load(p + ' 40px Figtree', 'Áa'))), new Promise(r => setTimeout(r, 2000))]); } catch { /* segue com a fonte do sistema */ }
+
+    // ?simular=1 soma, só nesta página, uma consulta de mentira a cada 12 s (para ver a
+    // prateleira acender sem depender de uma sessão de verdade)
+    const SIMULAR = new URLSearchParams(location.search).get('simular') === '1';
+    const sala = montarSalaMemoria();
+    const LARG = sala.largura, PROF = sala.profundidade;
+    E.larguraMaxima = LARG; E.X0 = -LARG / 2; E.X1 = LARG / 2; E.ZN = -PROF / 2; E.ZS = PROF / 2;
+    iniciarCena(document.getElementById('cena'));
+    const cena = E.cena;
+    caixa(LARG + 0.3, 0.7, PROF + 0.3, COR.base, 0, -0.8, 0, cena);
+    cena.add(sala.grupo);
+
+    const VERBO = { consultar: 'consultando', gravar: 'gravando', usar: 'usando a skill' };
+    const NOMES = { preferencias: 'Preferências', projetos: 'Projetos', referencias: 'Referências', voce: 'Sobre você', skills: 'Skills', regras: 'Regras', codex: 'Codex', indice: 'Índice' };
+
+    function simulacao(d) {
+      const areas = ['preferencias', 'projetos', 'skills', 'indice', 'referencias', 'regras'];
+      const i = Math.floor(Date.now() / 12000);
+      const area = areas[i % areas.length];
+      const acao = i % 3 === 0 ? 'gravar' : area === 'skills' ? 'usar' : 'consultar';
+      const titulo = d.recentes?.find(r => r.area === area)?.titulo || 'Exemplo de consulta';
+      const quando = i * 12000;
+      const ev = { quando, ha: 'agora', hora: '', provedor: i % 2 ? 'openai' : 'anthropic', agente: i % 2 ? 'Codex' : 'Claude', agenteId: 'simulado', sessaoId: 'simulado', pasta: 'teste', acao, area, titulo, nivel: i % 4 };
+      d.atividadeAgora = [ev, ...(d.atividadeAgora || [])];
+      if (area === 'indice') Object.assign(d.fichario, { ativa: true, acao });
+      else Object.assign(d.prateleiras.find(p => p.id === area), { ativa: true, acao, nivel: ev.nivel });
+      return d;
+    }
+
+    async function ler() {
+      try {
+        let d = await (await fetch('/api/memoria', { cache: 'no-store' })).json();
+        if (SIMULAR) d = simulacao(d);
+        sala.atualizar(d);
+        const t = d.totais;
+        document.getElementById('resumo').textContent = `${t.memorias} memórias · ${t.skills} skills · ${t.regras} regras` + (t.codex ? ` · ${t.codex} do Codex` : '');
+        const a = d.atividadeAgora?.[0];
+        const el = document.getElementById('agora');
+        el.hidden = !a;
+        if (a) {
+          el.textContent = `${a.agente} ${VERBO[a.acao] || a.acao}: ${NOMES[a.area] || a.area} · ${a.titulo}`;
+          el.classList.toggle('gravar', a.acao === 'gravar');
+        }
+        podarSombras();
+        E.sombraSuja = true;
+      } catch {
+        document.getElementById('resumo').textContent = 'sem conexão com o servidor local';
+      }
+    }
+
+    function enquadrar() {
+      const { camera, controles } = E;
+      const centro = new THREE.Vector3(0, 0.7, 0);
+      camera.position.set(30, 27.6, 30);
+      camera.lookAt(centro);
+      camera.updateMatrixWorld();
+      const inv = camera.matrixWorldInverse;
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const x of [-LARG / 2, LARG / 2]) for (const y of [-0.8, sala.altura]) for (const z of [-PROF / 2, PROF / 2]) {
+        const v = new THREE.Vector3(x, y, z).applyMatrix4(inv);
+        x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+      }
+      camera.zoom = Math.min((camera.right - camera.left) / ((x1 - x0) * 1.06), (camera.top - camera.bottom) / ((y1 - y0) * 1.08));
+      camera.updateProjectionMatrix();
+      controles.target.copy(centro);
+      controles.update();
+      E.sujo = true;
+    }
+
+    await ler();
+    ajustarSombra(new THREE.Box3().setFromObject(sala.grupo));
+    ajustarTela();
+    enquadrar();
+    addEventListener('resize', enquadrar);
+    setInterval(ler, 10000);
+
+    function quadro(ms) {
+      requestAnimationFrame(quadro);
+      sala.animar(ms / 1000);
+      E.sujo = true; E.sombraSuja = true;   // o bibliotecário anda: redesenha e recalcula a sombra
+      renderizar();
+    }
+    requestAnimationFrame(quadro);
+    window.salaMemoria = sala;
+  </script>
+</body>
+</html>

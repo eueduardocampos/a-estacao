@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sala de missão · A Estação</title>
+  <link rel="icon" href="icone-64.png">
+  <meta name="theme-color" content="#030870">
+  <!-- Figtree local (licença OFL, pacote @fontsource/figtree): nada sai da máquina -->
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/600.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/700.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/800.css">
+  <style>
+    :root { --navy: #030870; --fundo-1: #d9d4ea; --fundo-2: #a99fca; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      background: radial-gradient(ellipse at 50% 35%, var(--fundo-1), var(--fundo-2));
+      font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--navy);
+    }
+    #cena { position: fixed; inset: 0; }
+    #rotulos { position: fixed; inset: 0; pointer-events: none; }
+    header {
+      position: fixed; top: 16px; left: 16px; max-width: calc(100vw - 32px);
+      background: rgba(255,255,255,.86); border-radius: 14px; padding: 10px 14px;
+      box-shadow: 0 2px 8px rgba(3,8,112,.12);
+    }
+    h1 { margin: 0; font-size: 18px; font-weight: 800; }
+    header p { margin: 2px 0 0; font-size: 12px; font-weight: 600; opacity: .7; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="cena"></div>
+  <div id="rotulos"></div>
+  <header>
+    <h1>Sala de missão</h1>
+    <p id="resumo">lendo as missões…</p>
+  </header>
+  <script type="module">
+    import * as THREE from 'three';
+    import { E } from './estado.js';
+    import { iniciarCena, renderizar, ajustarSombra, ajustarTela, podarSombras } from './cena.js';
+    import { caixa, COR } from './pecas.js';
+    import { montarSalaMissao, dadosExemplo, nomeBonito, tempoRelativo } from './sala-missao.js';
+    // Figtree local: espera as espessuras usadas antes de desenhar placas e telas (no máximo 2 s)
+    try { await Promise.race([Promise.all(['600', '700', '800'].map(p => document.fonts.load(p + ' 40px Figtree', 'Áa'))), new Promise(r => setTimeout(r, 2000))]); } catch { /* segue com a fonte do sistema */ }
+
+    // ?exemplo=varias | uma | concluida | vazia mostra dados de exemplo em vez de /api/missao
+    const exemplo = new URLSearchParams(location.search).get('exemplo');
+    const sala = montarSalaMissao();
+    const LARG = sala.largura, PROF = sala.profundidade, ALT = sala.altParede;
+    E.larguraMaxima = LARG; E.X0 = -LARG / 2; E.X1 = LARG / 2; E.ZN = -PROF / 2; E.ZS = PROF / 2;
+    iniciarCena(document.getElementById('cena'));
+    const cena = E.cena;
+    caixa(LARG + 0.3, 0.7, PROF + 0.3, COR.base, 0, -0.8, 0, cena);
+    cena.add(sala.grupo);
+
+    function resumir(d) {
+      const ativas = d.missoes.filter(m => m.ativa);
+      if (ativas.length === 1) {
+        const m = ativas[0];
+        return `Missão em andamento: ${nomeBonito(m.nome, m.descricao)}` + (m.faseAtual ? ` · fase ${m.faseAtual}` : '') + ` · começou há ${tempoRelativo(Date.now() - m.inicio)}`;
+      }
+      if (ativas.length > 1) return `${ativas.length} missões em andamento`;
+      const ultima = d.missoes[0];
+      return ultima ? `Nenhuma missão em andamento · a última terminou há ${tempoRelativo(Date.now() - ultima.fim)}` : 'Nenhuma missão em andamento';
+    }
+
+    async function ler() {
+      try {
+        const d = exemplo ? dadosExemplo(exemplo) : await (await fetch('/api/missao', { cache: 'no-store' })).json();
+        if (!d || !Array.isArray(d.missoes)) throw new Error('resposta inesperada');
+        sala.atualizar(d);
+        document.getElementById('resumo').textContent = resumir(d);
+        podarSombras();
+        E.sombraSuja = true;
+      } catch {
+        document.getElementById('resumo').textContent = 'sem conexão com o servidor local';
+      }
+    }
+
+    function enquadrar() {
+      const { camera, controles } = E;
+      const centro = new THREE.Vector3(0, 0.7, 0);
+      camera.position.set(30, 27.6, 30);
+      camera.lookAt(centro);
+      camera.updateMatrixWorld();
+      const inv = camera.matrixWorldInverse;
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const x of [-LARG / 2, LARG / 2]) for (const y of [-0.8, ALT]) for (const z of [-PROF / 2, PROF / 2]) {
+        const v = new THREE.Vector3(x, y, z).applyMatrix4(inv);
+        x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+      }
+      camera.zoom = Math.min((camera.right - camera.left) / ((x1 - x0) * 1.06), (camera.top - camera.bottom) / ((y1 - y0) * 1.08));
+      camera.updateProjectionMatrix();
+      controles.target.copy(centro);
+      controles.update();
+      E.sujo = true;
+    }
+
+    await ler();
+    ajustarSombra(new THREE.Box3().setFromObject(sala.grupo));
+    ajustarTela();
+    enquadrar();
+    addEventListener('resize', enquadrar);
+    setInterval(ler, 5000);
+
+    function quadro(ms) {
+      requestAnimationFrame(quadro);
+      sala.animar(ms / 1000);
+      E.sujo = true; E.sombraSuja = true;   // o coordenador anda: redesenha e recalcula a sombra
+      renderizar();
+    }
+    requestAnimationFrame(quadro);
+    window.salaMissao = sala;
+  </script>
+</body>
+</html>

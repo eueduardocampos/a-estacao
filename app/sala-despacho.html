@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Despacho · A Estação</title>
+  <link rel="icon" href="icone-64.png">
+  <meta name="theme-color" content="#030870">
+  <!-- Figtree local (licença OFL, pacote @fontsource/figtree): nada sai da máquina -->
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/600.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/700.css">
+  <link rel="stylesheet" href="./node_modules/@fontsource/figtree/800.css">
+  <style>
+    :root { --navy: #030870; --fundo-1: #ead9c4; --fundo-2: #c7aa8c; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      background: radial-gradient(ellipse at 50% 35%, var(--fundo-1), var(--fundo-2));
+      font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--navy);
+    }
+    #cena { position: fixed; inset: 0; }
+    #rotulos { position: fixed; inset: 0; pointer-events: none; }
+    header {
+      position: fixed; top: 16px; left: 16px; max-width: calc(100vw - 32px);
+      background: rgba(255,255,255,.86); border-radius: 14px; padding: 10px 14px;
+      box-shadow: 0 2px 8px rgba(3,8,112,.12);
+    }
+    h1 { margin: 0; font-size: 18px; font-weight: 800; }
+    header p { margin: 2px 0 0; font-size: 12px; font-weight: 600; opacity: .7; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="cena"></div>
+  <div id="rotulos"></div>
+  <header>
+    <h1>Despacho</h1>
+    <p id="resumo">lendo as rotinas…</p>
+  </header>
+  <script type="module">
+    import * as THREE from 'three';
+    import { E } from './estado.js';
+    import { iniciarCena, renderizar, ajustarSombra, ajustarTela, podarSombras } from './cena.js';
+    import { caixa, COR } from './pecas.js';
+    import { montarSalaDespacho } from './sala-despacho.js';
+    // Figtree local: espera as espessuras usadas antes de desenhar placas e telas (no máximo 2 s)
+    try { await Promise.race([Promise.all(['600', '700', '800'].map(p => document.fonts.load(p + ' 40px Figtree', 'Áa'))), new Promise(r => setTimeout(r, 2000))]); } catch { /* segue com a fonte do sistema */ }
+
+    // ?simular=1 (6 rotinas, uma rodando e outra partindo em 20 s) ou ?simular=2 (12, com páginas)
+    const params = new URLSearchParams(location.search);
+    const simular = Number(params.get('simular') || 0);
+    // ?foco=quadro enquadra só o quadro de horários (para ler de perto)
+    const foco = params.get('foco');
+
+    const sala = montarSalaDespacho();
+    const LARG = sala.largura, PROF = sala.profundidade;
+    E.larguraMaxima = LARG; E.X0 = -LARG / 2; E.X1 = LARG / 2; E.ZN = -PROF / 2; E.ZS = PROF / 2;
+    iniciarCena(document.getElementById('cena'));
+    const cena = E.cena;
+    caixa(LARG + 0.3, 0.7, PROF + 0.3, COR.base, 0, -0.8, 0, cena);
+    cena.add(sala.grupo);
+
+    function dadosSimulados() {
+      const agora = Date.now(), min = 60_000, h = 60 * min, dia = 24 * h;
+      const r = (id, nome, agencia, descricaoHorario, estado, proxima, ultima, extra = {}) => ({
+        id, chave: id, nome, agencia, descricaoHorario, estado, ativa: estado === 'ativa',
+        proxima: proxima == null ? null : { ms: agora + proxima }, ultima: ultima == null ? null : { ms: agora - ultima[0], ok: ultima[1] },
+        rodandoAgora: false, historico: [], ...extra,
+      });
+      const base = [
+        r('claude:resumo', 'Resumo da manhã', 'claude', 'dias úteis às 9h', 'ativa', null, [12 * min, null], { rodandoAgora: true }),
+        r('codex:stories', 'Stories de domingo · Lucas Render', 'codex', 'a cada 5 min', 'ativa', 20_000, [5 * min, true]),
+        r('claude:mencoes', 'Checagem de mencoes', 'claude', 'de hora em hora, das 7h às 23h', 'ativa', 28 * min, [32 * min, true]),
+        r('codex:relatorio', 'Relatório semanal de anúncios', 'codex', 'sextas às 22h', 'ativa', 3 * h + 20 * min, [6 * dia, false]),
+        r('claude:sexta', 'Auditoria de sexta a noite', 'claude', 'sem horário, dispara na mão', 'manual', null, null),
+        r('codex:limpeza', 'Limpeza de rascunhos', 'codex', 'todo dia às 3h', 'pausada', null, [2 * dia, true]),
+      ];
+      if (simular >= 2) base.push(
+        r('claude:a', 'Backup do cérebro', 'claude', 'todo dia às 2h', 'ativa', 11 * h, [13 * h, true]),
+        r('claude:b', 'Pauta da semana', 'claude', 'segundas às 8h30', 'ativa', 2 * dia, [5 * dia, true]),
+        r('codex:c', 'Conferência de faturas', 'codex', 'todo dia 1 às 9h', 'ativa', 28 * dia, [3 * dia, true]),
+        r('claude:d', 'Auditoria diária', 'claude', 'sem horário, dispara na mão', 'manual', null, [9 * dia, true]),
+        r('codex:e', 'Resumo de métricas', 'codex', 'a cada 6 h', 'pausada', null, null),
+        r('claude:f', 'Lembrete de pagamento', 'claude', 'uma vez, 10/10 às 10h', 'ativa', 7 * dia, null),
+      );
+      return { rotinas: base, geradoEm: new Date(agora).toISOString(), resumo: {} };
+    }
+
+    let simulado = null;
+    async function ler() {
+      try {
+        let d;
+        if (simular) { simulado ||= dadosSimulados(); d = simulado; }
+        else d = await (await fetch('/api/despacho', { cache: 'no-store' })).json();
+        sala.atualizar(d);
+        const rot = d.rotinas || [];
+        const ativas = rot.filter(r => r.estado === 'ativa').length;
+        const rodando = rot.filter(r => r.rodandoAgora).length;
+        const partes = [`${rot.length} ${rot.length === 1 ? 'rotina' : 'rotinas'}`];
+        if (ativas) partes.push(`${ativas} ${ativas === 1 ? 'ativa' : 'ativas'}`);
+        if (rodando) partes.push(`${rodando} rodando agora`);
+        const prox = rot.filter(r => r.ativa && r.proxima).sort((a, b) => a.proxima.ms - b.proxima.ms)[0];
+        if (prox && !rodando) partes.push(`próxima: ${prox.nome}`);
+        document.getElementById('resumo').textContent = (simular ? 'simulação · ' : '') + partes.join(' · ');
+        podarSombras();
+        E.sombraSuja = true;
+      } catch {
+        document.getElementById('resumo').textContent = 'sem conexão com o servidor local';
+      }
+    }
+
+    function enquadrar() {
+      const { camera, controles } = E;
+      const caixaQuadro = foco === 'quadro' ? new THREE.Box3().setFromObject(sala.quadro) : null;
+      const centro = caixaQuadro ? caixaQuadro.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, 0.8, 0);
+      camera.position.copy(centro).add(new THREE.Vector3(30, 27.6, 30));
+      camera.lookAt(centro);
+      camera.updateMatrixWorld();
+      const inv = camera.matrixWorldInverse;
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      const xs = caixaQuadro ? [caixaQuadro.min.x, caixaQuadro.max.x] : [-LARG / 2, LARG / 2];
+      const ys = caixaQuadro ? [caixaQuadro.min.y, caixaQuadro.max.y] : [-0.8, 2.6];
+      const zs = caixaQuadro ? [caixaQuadro.min.z, caixaQuadro.max.z] : [-PROF / 2, PROF / 2];
+      for (const x of xs) for (const y of ys) for (const z of zs) {
+        const v = new THREE.Vector3(x, y, z).applyMatrix4(inv);
+        x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+      }
+      camera.zoom = Math.min((camera.right - camera.left) / ((x1 - x0) * 1.08), (camera.top - camera.bottom) / ((y1 - y0) * 1.1));
+      camera.updateProjectionMatrix();
+      controles.target.copy(centro);
+      controles.update();
+      E.sujo = true;
+    }
+
+    await ler();
+    ajustarSombra(new THREE.Box3().setFromObject(sala.grupo));
+    ajustarTela();
+    enquadrar();
+    addEventListener('resize', enquadrar);
+    setInterval(ler, 10_000);
+
+    function quadro(ms) {
+      requestAnimationFrame(quadro);
+      sala.animar(ms / 1000);
+      E.sujo = true; E.sombraSuja = true;   // o despachante anda: redesenha e recalcula a sombra
+      renderizar();
+    }
+    requestAnimationFrame(quadro);
+    window.salaDespacho = sala;
+  </script>
+</body>
+</html>

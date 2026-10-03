@@ -1,0 +1,21 @@
+{
+  "name": "a-estacao-app",
+  "version": "0.7.0",
+  "private": true,
+  "description": "A Estação: as sessões do Claude Code e do Codex como astronautas num escritório 3D isométrico, rodando só na sua máquina.",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "author": "Astronauta Martech",
+  "type": "module",
+  "main": "servidor.js",
+  "scripts": {
+    "start": "node servidor.js",
+    "test": "node teste-multidao.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@fontsource/figtree": "^5.3.0",
+    "three": "^0.180.0"
+  }
+}
