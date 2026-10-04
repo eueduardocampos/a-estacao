@@ -1856,14 +1856,14 @@ async function abrirSessao(req, res) {
 // estado fica neutro ('sem-releases' ou 'sem-resposta'), nunca erro na tela.
 // A página só MOSTRA como atualizar; nada aqui executa a atualização.
 //   ESTACAO_NOVIDADES=nao   não consulta o GitHub (nada sai da máquina)
-//   ESTACAO_REPO=dono/repo  outro repositório (padrão astronauta-martech/a-estacao)
+//   ESTACAO_REPO=dono/repo  outro repositório (padrão eueduardocampos/a-estacao)
 // Resposta: { versao, commit, clone, repo, urlRepo, pasta, comando,
 //   novidades: { estado, consultadoEm, ultima, releases }, temVersaoNova, versaoNova }
 //   estado: 'ok' | 'sem-releases' | 'sem-resposta' | 'desligado' | 'nao-consultado'
 //   release: { versao, nome, publicadaEm, url, notas } (notas em texto, até 4 mil caracteres)
 // ---------------------------------------------------------------------------
 const RAIZ_PROJETO = path.dirname(PASTA_APP);
-const REPO_NOVIDADES = /^[\w.-]+\/[\w.-]+$/.test(process.env.ESTACAO_REPO || '') ? process.env.ESTACAO_REPO : 'astronauta-martech/a-estacao';
+const REPO_NOVIDADES = /^[\w.-]+\/[\w.-]+$/.test(process.env.ESTACAO_REPO || '') ? process.env.ESTACAO_REPO : 'eueduardocampos/a-estacao';
 const NOVIDADES_LIGADAS = process.env.ESTACAO_NOVIDADES !== 'nao';
 const NOVIDADES_MS = 6 * 60 * 60 * 1000;
 const NOVIDADES_TIMEOUT_MS = 4000;

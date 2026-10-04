@@ -2,6 +2,8 @@
 
 **Veja os seus agentes de IA trabalhando.** A Estação mostra as sessões do Claude Code e do Codex que estão abertas no seu Mac como pequenos astronautas numa estação 3D vista de cima, como uma maquete. Cada astronauta é uma conversa de verdade: quando ela edita arquivos, ele trabalha na mesa; quando pesquisa na internet, vai para a sala de pesquisa; quando espera você responder, entra na fila da sua mesa; quando termina, descansa e depois vai embora.
 
+Criado por [Eduardo Campos](https://github.com/eueduardocampos), conselheiro da Astronauta Martech, para quem quiser usar, de graça.
+
 Tudo roda só no seu computador. Nada sobre as suas conversas é enviado para a internet.
 
 ![A Estação no modo de ensaio](docs/estacao.png)
@@ -41,7 +43,7 @@ Tudo roda só no seu computador. Nada sobre as suas conversas é enviado para a 
 No Terminal:
 
 ```bash
-git clone https://github.com/astronauta-martech/a-estacao.git
+git clone https://github.com/eueduardocampos/a-estacao.git
 cd a-estacao
 npm install
 ./instalar.sh
@@ -103,7 +105,7 @@ Testado num MacBook Pro com 100 astronautas na tela ao mesmo tempo: 55 quadros p
 ## Limitações
 
 - **Só macOS** por enquanto. O servidor é Node puro, mas o app de dois cliques, a leitura das sessões do app de desktop e o botão de abrir a conversa dependem do Mac.
-- **Limites do plano Claude dependem de uma fonte local opcional.** O Claude Code não grava a porcentagem de uso do plano nos arquivos locais. A Estação lê esses números do painel [AI Usage](https://github.com/astronauta-martech/ai-usage), se ele estiver rodando no mesmo Mac (`http://127.0.0.1:8090`). Sem ele, a Sala Anthropic mostra "indisponível". Os limites do Codex vêm das próprias sessões do Codex.
+- **Limites do plano Claude dependem de uma fonte local opcional.** O Claude Code não grava a porcentagem de uso do plano nos arquivos locais. A Estação lê esses números do painel [AI Usage](https://github.com/eueduardocampos/ai-usage), se ele estiver rodando no mesmo Mac (`http://127.0.0.1:8090`). Sem ele, a Sala Anthropic mostra "indisponível". Os limites do Codex vêm das próprias sessões do Codex.
 - **"Terminou com sugestão" é um palpite.** Perguntas pendentes e pedidos de aprovação são detectados com segurança. Já a ideia de que uma conversa "terminou oferecendo um próximo passo" vem do jeito que a última mensagem termina e pode errar.
 - **Depende do formato dos registros.** A Estação lê arquivos internos do Claude Code e do Codex, que podem mudar a cada versão.
 - **Nomes de serviços, não logos.** As telas mostram o nome escrito do serviço em uso; não há logos de terceiros.
@@ -117,11 +119,11 @@ Testado num MacBook Pro com 100 astronautas na tela ao mesmo tempo: 55 quadros p
 
 ## Créditos
 
-- Criado pela **Astronauta Martech**.
+- Criado por **Eduardo Campos**, conselheiro da Astronauta Martech, para quem quiser usar, de graça.
 - Motor 3D: [Three.js](https://threejs.org), licença MIT, baixado pelo `npm install` (não faz parte deste repositório).
 - Fonte: [Figtree](https://fonts.google.com/specimen/Figtree), licença SIL Open Font License, servida localmente pelo pacote [@fontsource/figtree](https://fontsource.org/fonts/figtree).
 - Claude e Anthropic são marcas da Anthropic. Codex, ChatGPT e OpenAI são marcas da OpenAI. Os nomes de serviços e conectores exibidos pertencem aos seus titulares. Este projeto não tem afiliação com nenhuma dessas empresas.
 
 ## Licença
 
-**Licença de Uso Astronauta Martech, versão 1.0.** Em resumo: você pode usar, copiar, adaptar e compartilhar de graça, inclusive para prestar serviços pagos; não pode cobrar pela Estação em si; precisa manter o aviso de licença e o crédito à Astronauta Martech; e o material vem sem garantia. O texto completo, em português e em inglês, está em [LICENSE](LICENSE).
+[MIT](LICENSE) © 2026 Eduardo Campos. Uso livre e gratuito, com o aviso de licença mantido. O nome "A Estação" e o astronauta identificam este projeto e não vêm com a licença.
