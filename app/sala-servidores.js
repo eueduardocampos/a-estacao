@@ -12,6 +12,7 @@ import { tween, cancelarTweens } from './tween.js';
 import { E } from './estado.js';
 
 const FONTE = 'Figtree, -apple-system, "Helvetica Neue", sans-serif';
+let sistema = 'mac';   // 'windows' quando o servidor roda no Windows (vem em dados.maquina.sistema)
 const C = {
   grafite: 0x2a2e3a, rackCorpo: 0x30343f, rackFrente: 0x23262f, pisoTec: 0xc9ccd4, juntas: 0xb3b7c1,
   bandeja: 0x8d929e, parede: 0xe9ebef,
@@ -200,7 +201,7 @@ export function criarRack(srv, i = 0, tamanho = null) {
   return { grupo: g, atualizar, animar, dim, liberar() { t.textura.dispose(); t.material.dispose(); for (const l of leds) l.mat.dispose(); } };
 }
 
-// Rack baixo e discreto que agrupa os apps do Mac
+// Rack baixo e discreto que agrupa os apps do sistema (Mac ou Windows)
 export function criarRackApps(apps) {
   const g = new THREE.Group();
   caixa(LARG_RACK * 1.6, 1.0, PROF_RACK, 0x3a3e49, 0, 0, 0, g);
@@ -217,7 +218,7 @@ export function criarRackApps(apps) {
     c.fillStyle = '#1b1f2b'; c.fillRect(0, 0, 820, 420);
     c.fillStyle = 'rgba(255,255,255,0.85)'; c.textAlign = 'left'; c.textBaseline = 'middle';
     c.font = `800 40px ${FONTE}`;
-    c.fillText(`Apps do Mac (${nomes.length})`, 30, 46);
+    c.fillText(`Apps do ${sistema === 'windows' ? 'Windows' : 'Mac'} (${nomes.length})`, 30, 46);
     c.fillStyle = 'rgba(255,255,255,0.55)';
     c.font = `600 26px ${FONTE}`;
     nomes.slice(0, 10).forEach((n, i) => c.fillText(n.slice(0, 26), 30 + (i % 2) * 400, 110 + Math.floor(i / 2) * 58));
@@ -335,6 +336,7 @@ export function montarSalaServidores({ largura = 8.2, profundidade = 4.4, altPar
 
   function atualizar(dados) {
     if (!dados) return;
+    sistema = dados.maquina?.sistema || 'mac';
     painel.atualizar(dados.maquina);
     const meus = dados.servidores.filter(s => s.categoria !== 'app');
     const apps = dados.servidores.filter(s => s.categoria === 'app');
@@ -517,6 +519,7 @@ export function montarModuloServidores({ lado = 's', xMundo = 0 } = {}) {
   function atualizar(dados) {
     if (!dados) return;
     ultimosDados = dados;
+    sistema = dados.maquina?.sistema || 'mac';
     painel.atualizar(dados.maquina);
     const agora = Date.now();
     lista = (dados.servidores || []).filter(s => s.categoria !== 'app');

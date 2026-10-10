@@ -77,6 +77,7 @@ import { agentesCodex, limitesCodex, configurarCodex } from './fonte-codex.js';
 import { salaDosServidores } from './fonte-servidores.js';
 import { terminaComOferta } from './pendencia.js';
 import crypto from 'node:crypto';
+import { WINDOWS, PASTA_DESKTOP, abrirUrl, sonda, aoLerSonda } from './plataforma.js';
 
 const PORTA = Number(process.env.PORTA || 4317);
 const PASTA_APP = path.dirname(fileURLToPath(import.meta.url));
@@ -134,7 +135,22 @@ function lerInicios(pids, tz) {
     });
   });
 }
+// Windows: o Claude grava procStart como FILETIME (unidades de 100 ns desde 1601, em
+// texto) e a sonda devolve o início de cada processo no mesmo formato, com a última
+// casa arredondada; por isso a comparação aceita 1 ms de folga.
+const FOLGA_FILETIME = 10000n;
+let sondaJaLeu = false;
+if (WINDOWS) aoLerSonda(() => { if (!sondaJaLeu) { sondaJaLeu = true; cacheEstado.quando = 0; } });
+function mesmoProcessoWindows(s) {
+  const inicios = sonda().inicios;
+  if (!inicios.size || !/^\d{15,20}$/.test(String(s.procStart))) return true;   // sonda ainda sem resposta, ou formato desconhecido
+  const real = inicios.get(s.pid);
+  if (!real) return true;
+  const d = BigInt(s.procStart) - BigInt(real);
+  return (d < 0n ? -d : d) <= FOLGA_FILETIME;
+}
 function atualizarInicios(pids) {
+  if (WINDOWS) { sonda(); return; }
   const faltando = pids.some(p => !inicioPorPid.has(p));
   if (psRodando || !pids.length || (!faltando && Date.now() - psRodouEm < 30 * 1000)) return;
   psRodando = true;
@@ -148,6 +164,7 @@ function atualizarInicios(pids) {
 }
 function mesmoProcesso(s) {
   if (!s.procStart) return true;
+  if (WINDOWS) return mesmoProcessoWindows(s);
   const inicio = inicioPorPid.get(s.pid);
   if (!inicio || (!inicio.utc && !inicio.local)) return true;   // ainda sem resposta do ps: não esconder por isso
   const alvo = normalizar(s.procStart);
@@ -474,7 +491,7 @@ function lerJournal(caminho) {
 // desconhecido (no máximo 1 vez a cada 30 s). Cache por arquivo com mtime: só relê o
 // que mudou. Do arquivo, só a lista remoteMcpServersConfig passa por JSON.parse.
 // ---------------------------------------------------------------------------
-const SESSOES_DESKTOP = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions');
+const SESSOES_DESKTOP = path.join(PASTA_DESKTOP, 'claude-code-sessions');
 let nomesConectores = new Map();               // código -> nome como veio da claude.ai
 const nomesPorArquivo = new Map();             // arquivo -> { mtime, tamanho, pares: [[código, nome]] }
 let varrendoNomes = false;
@@ -1072,7 +1089,7 @@ function rotular(nome, e = {}) {
     if (/get_page_text|read_page/.test(n)) return 'Lendo a página';
     if (n === 'find') return 'Procurando na página';
     if (n === 'form_input') return 'Preenchendo um campo';
-    return servidor === 'computer-use' ? 'Mexendo no Mac' : 'Mexendo no navegador';
+    return servidor === 'computer-use' ? (WINDOWS ? 'Mexendo no computador' : 'Mexendo no Mac') : 'Mexendo no navegador';
   }
   if (SIMULADOR.test(servidor)) return 'Testando o app';
   if (ehBuscaWeb(servidor)) {
@@ -1239,12 +1256,20 @@ function arquivosDeSubagentes(dirSub) {
 // (o tool_result traz "running in background with ID: X") e a descrição de cada uma.
 // Comando em primeiro plano também abre um arquivo desses: fica de fora quando há
 // Bash pendente que começou junto (até 5 s) com o arquivo.
+// No Windows a saída fica em %TEMP%\claude\<projeto>\<sessão>\tasks\<id>.output e não
+// há como saber, sem privilégio, quem está com o arquivo aberto: lá a lista são os
+// arquivos que existem, e só conta a tarefa que a transcrição conhece e ainda não
+// recebeu aviso de fim (ver tarefasDaSessao).
 // ---------------------------------------------------------------------------
 let tarefasAbertas = new Map();   // sessionId -> Map(id -> criadoEm ms)
 let lendoTarefas = false, tarefasLidasEm = 0;
 function atualizarTarefasAbertas() {
   if (lendoTarefas || Date.now() - tarefasLidasEm < 5000) return;
   lendoTarefas = true;
+  if (WINDOWS) {
+    tarefasNoWindows().then(novo => { tarefasAbertas = novo; }).catch(() => {}).finally(() => { lendoTarefas = false; tarefasLidasEm = Date.now(); });
+    return;
+  }
   execFile('lsof', ['-a', '-u', String(process.getuid()), '-d', '1', '-Fn'], { timeout: 4000, maxBuffer: 8 * 1024 * 1024 }, (erro, saida) => {
     lendoTarefas = false; tarefasLidasEm = Date.now();
     if (erro && !saida) return;
@@ -1260,6 +1285,28 @@ function atualizarTarefasAbertas() {
   });
 }
 
+async function tarefasNoWindows() {
+  const novo = new Map();
+  const raiz = path.join(os.tmpdir(), 'claude');
+  const abertas = new Set(sessoesAbertas().map(s => s.sessionId));
+  const ler = dir => fsp.readdir(dir).catch(() => []);
+  for (const projeto of await ler(raiz)) {
+    for (const sessao of await ler(path.join(raiz, projeto))) {
+      if (!abertas.has(sessao)) continue;
+      const dir = path.join(raiz, projeto, sessao, 'tasks');
+      for (const nome of await ler(dir)) {
+        const m = nome.match(/^(\w+)\.output$/);
+        if (!m) continue;
+        let st;
+        try { st = await fsp.stat(path.join(dir, nome)); } catch { continue; }
+        if (!novo.has(sessao)) novo.set(sessao, new Map());
+        novo.get(sessao).set(m[1], st.birthtimeMs || st.ctimeMs);
+      }
+    }
+  }
+  return novo;
+}
+
 function tarefasDaSessao(s, t, pasta, raiz, agora) {
   atualizarTarefasAbertas();
   const abertas = tarefasAbertas.get(s.sessionId);
@@ -1269,6 +1316,7 @@ function tarefasDaSessao(s, t, pasta, raiz, agora) {
   for (const [id, criado] of abertas) {
     const conhecida = t?.tarefasFundo.get(id);
     if (conhecida?.ferramenta === 'Workflow') continue;   // workflow vira astronauta em subagentesDa
+    if (WINDOWS && !conhecida) continue;   // sem lsof: só a tarefa que a transcrição diz estar rodando
     if (!conhecida && bashPendentes.some(f => Math.abs(f.quando - criado) < 5000)) continue;   // comando em primeiro plano
     const desc = String(conhecida?.descricao || '').trim();
     lista.push({
@@ -1286,22 +1334,47 @@ function tarefasDaSessao(s, t, pasta, raiz, agora) {
 // Workflow lançado há muito tempo (fora dos últimos 256 KB lidos da transcrição): o
 // nome e o "ainda rodando" saem de um grep em segundo plano na transcrição da mãe,
 // guardado por execução e refeito a cada 20 s (só enquanto o workflow aparece).
+// Primeira linha do arquivo que contém o trecho (o que o grep -F -m 1 fazia; em JS
+// para não depender de grep instalado). Lê em fluxo e para na primeira ocorrência.
+function primeiraLinhaCom(arquivo, trecho) {
+  return new Promise(ok => {
+    const alvo = Buffer.from(trecho, 'utf8');
+    const fluxo = fs.createReadStream(arquivo, { highWaterMark: 1024 * 1024 });
+    let linha = [], tamanho = 0, achou = false;
+    const conferir = () => {
+      const inteira = linha.length === 1 ? linha[0] : Buffer.concat(linha, tamanho);
+      return inteira.includes(alvo) ? inteira.toString('utf8') : null;
+    };
+    fluxo.on('data', pedaco => {
+      if (achou) return;
+      let de = 0, fim;
+      while ((fim = pedaco.indexOf(10, de)) >= 0) {
+        linha.push(pedaco.subarray(de, fim)); tamanho += fim - de;
+        const r = conferir();
+        if (r != null) { achou = true; fluxo.destroy(); return ok(r); }
+        linha = []; tamanho = 0; de = fim + 1;
+      }
+      if (de < pedaco.length) { linha.push(pedaco.subarray(de)); tamanho += pedaco.length - de; }
+    });
+    fluxo.on('end', () => { if (!achou) ok(tamanho ? conferir() : null); });
+    fluxo.on('error', () => ok(null));
+  });
+}
+
 const wfAntigos = new Map();   // runId -> { taskId, resumo, terminou, lidoEm, lendo }
 function workflowAntigo(transcricao, runId) {
   let w = wfAntigos.get(runId);
   if (!w) { w = { taskId: null, resumo: '', terminou: false, lidoEm: 0, lendo: false }; wfAntigos.set(runId, w); }
   if (!w.lendo && Date.now() - w.lidoEm > 20000) {
     w.lendo = true;
-    execFile('grep', ['-F', '-m', '1', 'Run ID: ' + runId, transcricao], { timeout: 5000, maxBuffer: 64 * 1024 * 1024 }, (e1, linha) => {
+    (async () => {
+      const linha = await primeiraLinhaCom(transcricao, 'Run ID: ' + runId);
       const m = String(linha || '').match(/Task ID: (\w+)\\nSummary: (.*?)\\n/);
       if (m) { w.taskId = m[1]; w.resumo = m[2].slice(0, 300); }
-      if (!w.taskId) { w.lendo = false; w.lidoEm = Date.now(); return; }
-      execFile('grep', ['-F', '-c', '<task-id>' + w.taskId + '</task-id>', transcricao], { timeout: 5000 }, (e2, n) => {
-        w.terminou = Number(String(n || '0').trim()) > 0;
-        w.lendo = false; w.lidoEm = Date.now();
-        cacheEstado.quando = 0;
-      });
-    });
+      if (!w.taskId) return;
+      w.terminou = (await primeiraLinhaCom(transcricao, '<task-id>' + w.taskId + '</task-id>')) != null;
+      cacheEstado.quando = 0;
+    })().catch(() => {}).finally(() => { w.lendo = false; w.lidoEm = Date.now(); });
   }
   return w;
 }
@@ -1760,7 +1833,7 @@ function responderJson(res, codigo, obj) {
 //   servidor monta a URL ele mesmo (nunca aceita URL do navegador):
 //     Claude: claude://code/needs-input?session=<id local>&source=a_estacao
 //     Codex:  codex://threads/<id da conversa>
-//   e chama execFile('/usr/bin/open', [url]), sem shell;
+//   e chama o open do macOS (ou o rundll32 do Windows) por execFile, sem shell;
 // - qualquer outra coisa: 400 (pedido malformado), 403 (origem ou token), 404 (id
 //   fora da fila), 409 (sessão que o app não sabe abrir), 429 (cliques seguidos).
 // - ESTACAO_ENSAIO=1: modo de ensaio, registra a URL no log e devolve no corpo em
@@ -1840,7 +1913,7 @@ async function abrirSessao(req, res) {
     console.log('[ensaio] abriria', url);
     return responderJson(res, 200, { ok: true, ensaio: true, url });
   }
-  execFile('/usr/bin/open', [url], { timeout: 5000 }, erro => {
+  abrirUrl(url, erro => {
     if (erro) { console.error('[abrir]', erro.message); return responderJson(res, 500, { ok: false, erro: 'não deu para abrir' }); }
     responderJson(res, 200, { ok: true });
   });
@@ -1984,7 +2057,8 @@ async function responderVersao(res, forcar = false) {
     repo: REPO_NOVIDADES,
     urlRepo: 'https://github.com/' + REPO_NOVIDADES,
     pasta: RAIZ_PROJETO,
-    comando: `cd ${entreAspas(RAIZ_PROJETO)} && ./atualizar.sh`,
+    comando: WINDOWS ? `powershell -ExecutionPolicy Bypass -File "${path.join(RAIZ_PROJETO, 'atualizar.ps1')}"` : `cd ${entreAspas(RAIZ_PROJETO)} && ./atualizar.sh`,
+    windows: WINDOWS,
     novidades,
     temVersaoNova,
     versaoNova: temVersaoNova ? ultima.versao : null,

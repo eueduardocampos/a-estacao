@@ -1,14 +1,17 @@
 // Fonte da sala dos servidores: o que está ligado nesta máquina, mantendo algo
 // de pé (processos escutando numa porta TCP), e quanto a máquina está usando de
-// CPU, GPU, memória e disco. Só leitura, com comandos do próprio macOS
-// (lsof, ps, ioreg, vm_stat, df), chamados por execFile, sem shell.
+// CPU, GPU, memória e disco. Só leitura. No macOS, com comandos do próprio sistema
+// (lsof, ps, ioreg, vm_stat, df), chamados por execFile, sem shell. No Windows, com
+// a sonda (sonda-windows.ps1, via plataforma.js) e o que o próprio Node sabe.
 
 import { execFile } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { WINDOWS, sonda } from './plataforma.js';
 
-const PASTA_APP = path.dirname(new URL(import.meta.url).pathname);
+const PASTA_APP = path.dirname(fileURLToPath(import.meta.url));
 const CACHE_MS = 5000;
 
 function rodar(cmd, args, timeout = 4000) {
@@ -21,6 +24,12 @@ function rodar(cmd, args, timeout = 4000) {
 // Servidores: lsof -F (campos p=pid, c=comando, n=endereço)
 // ---------------------------------------------------------------------------
 async function escutando() {
+  if (WINDOWS) {
+    // serviço do sistema ou de outro usuário (sem pasta e sem linha de comando) fica de
+    // fora, como no macOS, onde o lsof sem root só mostra os processos da própria conta
+    return sonda().escutando.filter(p => p.pasta || p.args)
+      .map(p => ({ pid: p.pid, comando: p.comando, portas: new Set(p.portas), soLocal: !!p.soLocal }));
+  }
   const saida = await rodar('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-F', 'pcn']);
   const porPid = new Map();
   let atual = null;
@@ -39,6 +48,9 @@ async function escutando() {
 
 async function detalhes(pids) {
   if (!pids.length) return new Map();
+  if (WINDOWS) {
+    return new Map(sonda().escutando.map(p => [p.pid, { cpu: p.cpu, memoriaMB: p.memoriaMB, ligadoHaS: p.ligadoHaS, args: p.args || '', pasta: p.pasta || '' }]));
+  }
   const saida = await rodar('ps', ['-o', 'pid=,%cpu=,rss=,etime=,args=', '-p', pids.join(',')]);
   const mapa = new Map();
   for (const l of saida.split('\n')) {
@@ -76,7 +88,8 @@ function classificar(p, d, portaPropria) {
   const args = d?.args || p.comando;
   const pasta = d?.pasta || '';
   const home = os.homedir();
-  const daEstacao = pasta === PASTA_APP || pasta.startsWith(PASTA_APP + path.sep);
+  const daEstacao = pasta === PASTA_APP || pasta.startsWith(PASTA_APP + path.sep)
+    || (pasta === path.dirname(PASTA_APP) && /servidor\.js/.test(args));   // npm start roda da raiz do projeto
   if (daEstacao) {
     const portas = [...p.portas];
     const oficial = portas.includes(4317);
@@ -91,11 +104,24 @@ function classificar(p, d, portaPropria) {
     const generico = nome === path.basename(pasta);
     return { categoria: 'projeto', nome: conhecido || (generico ? `${path.basename(path.dirname(pasta))} · ${nome}` : nome), detalhe: path.relative(home, pasta) };
   }
+  if (WINDOWS) return classificarWindows(p, pasta, home);
   if (/\/Applications\/|\/System\/|\/Library\/|\/usr\/libexec\//.test(args) || pasta === '/') {
     const app = args.match(/\/([^/]+)\.app\//);
     return { categoria: 'app', nome: app ? app[1] : p.comando };
   }
   return { categoria: 'app', nome: p.comando };
+}
+
+// Windows: os projetos nem sempre ficam na pasta pessoal (outro disco é comum). É
+// projeto o que roda de uma pasta que não é do sistema nem de programa instalado.
+const PASTAS_DE_APP = /^[a-z]:\\(windows|program files|program files \(x86\)|programdata)\\|\\appdata\\/i;
+function classificarWindows(p, pasta, home) {
+  if (!pasta || /^[a-z]:\\?$/i.test(pasta) || PASTAS_DE_APP.test(pasta + '\\')) return { categoria: 'app', nome: p.comando };
+  const conhecido = { 'ai-usage': 'Consumo de IA', 'claude-usage': 'Consumo de IA' }[path.basename(pasta)];
+  const nome = nomeDoProjeto(pasta);
+  const generico = nome === path.basename(pasta);
+  const dentroDeCasa = pasta.toLowerCase().startsWith(home.toLowerCase() + path.sep);
+  return { categoria: 'projeto', nome: conhecido || (generico ? `${path.basename(path.dirname(pasta)) || pasta.slice(0, 2)} · ${nome}` : nome), detalhe: dentroDeCasa ? path.relative(home, pasta) : pasta };
 }
 
 // ---------------------------------------------------------------------------
@@ -135,12 +161,17 @@ function usoCpu() {
 }
 
 async function usoGpu() {
+  if (WINDOWS) return sonda().gpu;
   const saida = await rodar('ioreg', ['-r', '-d', '1', '-w', '0', '-c', 'IOAccelerator']);
   const m = saida.match(/"Device Utilization %"=(\d+)/);
   return m ? +m[1] : null;
 }
 
 async function usoMemoria() {
+  if (WINDOWS) {
+    const total = os.totalmem(), usado = total - os.freemem();
+    return { pct: Math.round((usado / total) * 100), usadoGB: +(usado / 2 ** 30).toFixed(1), totalGB: Math.round(total / 2 ** 30) };
+  }
   const saida = await rodar('vm_stat', []);
   const pagina = +(saida.match(/page size of (\d+)/)?.[1] || 16384);
   const v = nome => +(saida.match(new RegExp(`${nome}:\\s+(\\d+)`))?.[1] || 0);
@@ -150,6 +181,14 @@ async function usoMemoria() {
 }
 
 async function usoDisco() {
+  if (WINDOWS) {
+    // o disco onde fica a pasta pessoal (em geral C:)
+    try {
+      const d = await fs.promises.statfs(path.parse(os.homedir()).root);
+      const total = d.blocks * d.bsize, livre = d.bavail * d.bsize;
+      return total ? { pct: Math.round(((total - livre) / total) * 100), livreGB: Math.round(livre / 1e9), totalGB: Math.round(total / 1e9) } : null;
+    } catch { return null; }
+  }
   // no macOS os dados ficam no volume Data; "/" é o volume do sistema, só leitura
   for (const alvo of ['/System/Volumes/Data', '/']) {
     const saida = await rodar('df', ['-k', alvo]);
@@ -178,14 +217,14 @@ export async function salaDosServidores(portaPropria) {
       const c = classificar(p, d, portaPropria);
       return {
         pid: p.pid, ...c, portas: [...p.portas].sort((a, b) => a - b), soLocal: p.soLocal,
-        cpu: d?.cpu ?? null, memoriaMB: d?.memoriaMB ?? null, ligadoHaS: segundosDe(d?.ligadoHa),
+        cpu: d?.cpu ?? null, memoriaMB: d?.memoriaMB ?? null, ligadoHaS: d?.ligadoHaS ?? segundosDe(d?.ligadoHa),
       };
     }).sort((a, b) => ({ estacao: 0, projeto: 1, app: 2 }[a.categoria] - { estacao: 0, projeto: 1, app: 2 }[b.categoria]) || a.portas[0] - b.portas[0]);
     const [gpu, memoria, disco] = await Promise.all([usoGpu(), usoMemoria(), usoDisco()]);
     const cpu = usoCpu();
     const dados = {
       geradoEm: Date.now(),
-      maquina: { nome: os.hostname().replace(/\.local$/, ''), cpu: cpu.media, cpuPico: cpu.pico, gpu, memoria, disco, nucleos: os.cpus().length },
+      maquina: { nome: os.hostname().replace(/\.local$/, ''), sistema: WINDOWS ? 'windows' : 'mac', cpu: cpu.media, cpuPico: cpu.pico, gpu, memoria, disco, nucleos: os.cpus().length },
       servidores,
     };
     cache = { quando: Date.now(), dados, pendente: null };

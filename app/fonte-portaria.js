@@ -44,12 +44,13 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { PASTA_DESKTOP } from './plataforma.js';
 
 const HOME = os.homedir();
 const CLAUDE = process.env.CLAUDE_CONFIG_DIR ? path.resolve(process.env.CLAUDE_CONFIG_DIR) : path.join(HOME, '.claude');
 const ARQUIVO_CONTA = process.env.CLAUDE_CONFIG_DIR ? path.join(CLAUDE, '.claude.json') : path.join(HOME, '.claude.json');
 const CODEX = process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : path.join(HOME, '.codex');
-const DESKTOP = path.join(HOME, 'Library', 'Application Support', 'Claude');
+const DESKTOP = PASTA_DESKTOP;
 const SESSOES_DESKTOP = path.join(DESKTOP, 'claude-code-sessions');
 const TOGGLES = path.join(DESKTOP, 'mcp-user-tool-toggles.json');
 

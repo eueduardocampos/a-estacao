@@ -1,6 +1,6 @@
 {
   "name": "a-estacao",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "private": true,
   "description": "A Estação: as sessões do Claude Code e do Codex como astronautas num escritório 3D isométrico, rodando só na sua máquina.",
   "license": "MIT",

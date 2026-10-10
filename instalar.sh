@@ -1,5 +1,5 @@
 #!/bin/bash
-# Instalador de A Estação (só macOS).
+# Instalador de A Estação no macOS (o do Windows é o instalar.ps1).
 #
 # O que faz, nesta ordem:
 #   1. confere macOS, Node 20 ou mais novo e npm;
@@ -42,7 +42,7 @@ falha() { printf '\nNão deu para instalar: %s\n' "$1" >&2; exit 1; }
 # 1. Requisitos
 # ---------------------------------------------------------------------------
 passo "Conferindo os requisitos"
-[ "$(uname)" = "Darwin" ] || falha "A Estação só funciona no macOS por enquanto."
+[ "$(uname)" = "Darwin" ] || falha "este instalador é o do macOS. No Windows, use o instalar.cmd."
 for arquivo in app/servidor.js app/index.html app/package.json iniciar.sh; do
   [ -f "$PASTA/$arquivo" ] || falha "não achei $arquivo. Rode o instalar.sh de dentro da pasta do repositório."
 done

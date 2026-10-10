@@ -48,6 +48,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { PASTA_DESKTOP } from './plataforma.js';
 
 const CLAUDE = process.env.CLAUDE_CONFIG_DIR ? path.resolve(process.env.CLAUDE_CONFIG_DIR) : path.join(os.homedir(), '.claude');
 const CODEX = process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : path.join(os.homedir(), '.codex');
@@ -55,7 +56,7 @@ const PROJETOS = path.join(CLAUDE, 'projects');
 const SESSOES = path.join(CLAUDE, 'sessions');
 const SESSOES_CODEX = path.join(CODEX, 'sessions');
 const INDICE_CODEX = path.join(CODEX, 'session_index.jsonl');
-const SESSOES_DESKTOP = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions');
+const SESSOES_DESKTOP = path.join(PASTA_DESKTOP, 'claude-code-sessions');
 
 const FUSO = process.env.ESTACAO_FUSO || 'America/Sao_Paulo';   // horários sempre de Brasília
 const CACHE_MS = 5000;

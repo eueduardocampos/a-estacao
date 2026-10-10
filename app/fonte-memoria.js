@@ -338,7 +338,9 @@ async function atualizarLento(agora, conhecidas) {
 // ---------------------------------------------------------------------------
 // "Agora": o que as sessões estão consultando e gravando
 // ---------------------------------------------------------------------------
-const MARCAS = ['/memory', '/skills/', 'SKILL.md', 'CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', 'AGENTS.override.md', '/.codex/memories', '"Skill"'];
+// as três últimas são as mesmas pastas escritas com a barra do Windows
+const MARCAS = ['/memory', '/skills/', 'SKILL.md', 'CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', 'AGENTS.override.md', '/.codex/memories', '"Skill"',
+  '\\memory', '\\skills\\', '\\.codex\\memories'];
 
 // Caminho -> { area, titulo, tipo } ou null
 function classificarCaminho(bruto) {

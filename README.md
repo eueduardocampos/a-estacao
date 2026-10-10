@@ -1,6 +1,6 @@
 # A Estação
 
-**Veja os seus agentes de IA trabalhando.** A Estação mostra as sessões do Claude Code e do Codex que estão abertas no seu Mac como pequenos astronautas numa estação 3D vista de cima, como uma maquete. Cada astronauta é uma conversa de verdade: quando ela edita arquivos, ele trabalha na mesa; quando pesquisa na internet, vai para a sala de pesquisa; quando espera você responder, entra na fila da sua mesa; quando termina, descansa e depois vai embora.
+**Veja os seus agentes de IA trabalhando.** A Estação mostra as sessões do Claude Code e do Codex que estão abertas no seu computador (Mac ou Windows) como pequenos astronautas numa estação 3D vista de cima, como uma maquete. Cada astronauta é uma conversa de verdade: quando ela edita arquivos, ele trabalha na mesa; quando pesquisa na internet, vai para a sala de pesquisa; quando espera você responder, entra na fila da sua mesa; quando termina, descansa e depois vai embora.
 
 Criado por [Eduardo Campos](https://github.com/eueduardocampos), conselheiro da Astronauta Martech, para quem quiser usar, de graça.
 
@@ -33,9 +33,9 @@ Tudo roda só no seu computador. Nada sobre as suas conversas é enviado para a 
 
 ## Requisitos
 
-- **macOS** (o app de dois cliques e a leitura das sessões foram feitos e testados no Mac).
+- **macOS**, ou **Windows 10 ou 11** (a versão para Windows chegou na 0.8.0 e ainda está em teste).
 - **Node.js 20 ou mais novo** ([nodejs.org](https://nodejs.org)). Para conferir: `node -v`.
-- **Claude Code e/ou Codex** instalados e já usados nesta conta do Mac (no terminal ou nos apps de desktop). Sem nenhum dos dois, A Estação abre, mas fica vazia.
+- **Claude Code e/ou Codex** instalados e já usados nesta conta (no terminal ou nos apps de desktop). Sem nenhum dos dois, A Estação abre, mas fica vazia.
 - Um navegador atual (Chrome, Safari, Edge, Firefox ou Arc).
 
 ## Como instalar
@@ -53,6 +53,26 @@ npm install
 - `./instalar.sh` confere os requisitos, cria o app **"A Estação"** de dois cliques dentro da pasta do projeto, com o ícone do astronauta, e um atalho na sua Mesa. Se preferir sem atalho: `./instalar.sh --sem-atalho`.
 
 O app guarda o caminho da pasta onde você clonou. Se mudar a pasta de lugar, rode `./instalar.sh` de novo.
+
+### No Windows (em teste)
+
+Precisa de Windows 10 ou 11, Node 20 ou mais novo e Git. No PowerShell:
+
+```
+git clone https://github.com/eueduardocampos/a-estacao.git
+cd a-estacao
+npm install
+.instalar.cmd
+```
+
+O `instalar.cmd` cria o atalho **"A Estação"** na Área de Trabalho (com `-ComInicio`, pelo `instalar.ps1`, ela também liga junto com o Windows). Para desligar, `parar.cmd`; para atualizar, `atualizar.cmd`.
+
+O que muda em relação ao Mac:
+
+- No lugar do `ps`, do `lsof` e do `ioreg`, um PowerShell fica ligado junto com o servidor (`app/sonda-windows.ps1`) e lê processos, portas e placa de vídeo a cada 5 s.
+- Na sala dos servidores, serviço do sistema ou programa aberto como administrador não aparece (o Windows não deixa ler a pasta nem a linha de comando deles).
+- Tarefa em segundo plano só aparece enquanto a conversa não recebeu o aviso de fim; no Mac dá para ver direto se o processo ainda está de pé.
+- Testado com o Claude Code do app de desktop. Codex no Windows ainda não foi conferido.
 
 ## Como abrir
 
@@ -83,6 +103,8 @@ A Estação sabe a própria versão (o número em `app/package.json` e, num clon
 2. Na pasta do projeto, rode `./atualizar.sh`. Ele confere se você mudou algum arquivo do projeto (se mudou, mostra quais e para, sem sobrescrever nada), baixa a versão nova com `git pull --ff-only` e atualiza as dependências.
 3. Abra de novo: dois cliques no app ou `./iniciar.sh`.
 
+No Windows, os mesmos passos são `parar.cmd`, `atualizar.cmd` e o atalho da Área de Trabalho.
+
 Quem mantém o repositório: publique cada versão como uma *release* do GitHub, com etiqueta no formato `v0.8.0` e as notas em português, e suba o `version` de `app/package.json` junto.
 
 ## Privacidade
@@ -104,7 +126,7 @@ Testado num MacBook Pro com 100 astronautas na tela ao mesmo tempo: 55 quadros p
 
 ## Limitações
 
-- **Só macOS** por enquanto. O servidor é Node puro, mas o app de dois cliques, a leitura das sessões do app de desktop e o botão de abrir a conversa dependem do Mac.
+- **Feita no macOS; no Windows está em teste** (veja "No Windows" em Como instalar). Linux ainda não.
 - **Limites do plano Claude dependem de uma fonte local opcional.** O Claude Code não grava a porcentagem de uso do plano nos arquivos locais. A Estação lê esses números do painel [AI Usage](https://github.com/eueduardocampos/ai-usage), se ele estiver rodando no mesmo Mac (`http://127.0.0.1:8090`). Sem ele, a Sala Anthropic mostra "indisponível". Os limites do Codex vêm das próprias sessões do Codex.
 - **"Terminou com sugestão" é um palpite.** Perguntas pendentes e pedidos de aprovação são detectados com segurança. Já a ideia de que uma conversa "terminou oferecendo um próximo passo" vem do jeito que a última mensagem termina e pode errar.
 - **Depende do formato dos registros.** A Estação lê arquivos internos do Claude Code e do Codex, que podem mudar a cada versão.

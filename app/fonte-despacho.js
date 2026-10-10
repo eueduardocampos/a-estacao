@@ -28,10 +28,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
+import { PASTA_DESKTOP } from './plataforma.js';
 
 const CLAUDE = process.env.CLAUDE_CONFIG_DIR ? path.resolve(process.env.CLAUDE_CONFIG_DIR) : path.join(os.homedir(), '.claude');
 const CODEX = process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : path.join(os.homedir(), '.codex');
-const APP_CLAUDE = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions');
+const APP_CLAUDE = path.join(PASTA_DESKTOP, 'claude-code-sessions');
 export const FUSO = 'America/Sao_Paulo';
 const CACHE_MS = 10_000;
 
@@ -610,13 +611,21 @@ function rotinasClaude(agora, avisos) {
 let pastaCopia = null;
 const marcaCopia = { chave: null, linhas: null };
 
-function sqliteJson(banco, sql) {
-  return new Promise(resolve => {
-    execFile('sqlite3', ['-json', banco, sql], { timeout: 4000, maxBuffer: 8 * 1024 * 1024 }, (erro, saida) => {
+// sqlite3 de linha de comando (vem no macOS); sem ele (Windows), o SQLite que vem
+// dentro do Node 22.5 ou mais novo. `banco` é sempre a cópia temporária.
+async function sqliteJson(banco, sql) {
+  const peloComando = await new Promise(resolve => {
+    execFile('sqlite3', ['-json', banco, sql], { timeout: 4000, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (erro, saida) => {
       if (erro) return resolve(null);
       try { resolve(saida.trim() ? JSON.parse(saida) : []); } catch { resolve(null); }
     });
   });
+  if (peloComando) return peloComando;
+  try {
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(banco);
+    try { return db.prepare(sql).all(); } finally { db.close(); }
+  } catch { return null; }
 }
 
 async function bancoCodex(avisos) {

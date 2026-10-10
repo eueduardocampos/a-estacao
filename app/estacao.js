@@ -246,7 +246,7 @@ let todasAsColunas = false;        // teste: mostra todas as colunas das salas d
 
 export function definirGanchos(g) { Object.assign(ganchos, g); }
 
-const nomeDaPasta = caminho => String(caminho).split('/').filter(Boolean).pop() || String(caminho);
+const nomeDaPasta = caminho => String(caminho).split(/[\\/]/).filter(Boolean).pop() || String(caminho);
 
 // ---------------------------------------------------------------------------
 // Módulo: grupo na posição final (x do centro da vaga, z = 0), filhos em

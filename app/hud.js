@@ -548,14 +548,14 @@ function montarPainel() {
     p.append(el('p', 'estado nova', `Tem versão nova: ${v.versaoNova}`));
     p.append(el('h3', null, 'Como atualizar'));
     const passos = el('ol');
-    passos.append(el('li', null, 'Feche A Estação (no Terminal, ./parar.sh).'));
+    passos.append(el('li', null, v.windows ? 'Feche A Estação (dois cliques em parar.cmd, na pasta do projeto).' : 'Feche A Estação (no Terminal, ./parar.sh).'));
     if (v.clone) {
-      const li = el('li', null, 'No Terminal, rode o comando abaixo. Ele confere se há alterações suas na pasta (se houver, mostra quais e não mexe em nada), baixa a versão nova com git pull e atualiza as dependências com npm install.');
+      const li = el('li', null, (v.windows ? 'No PowerShell' : 'No Terminal') + ', rode o comando abaixo. Ele confere se há alterações suas na pasta (se houver, mostra quais e não mexe em nada), baixa a versão nova com git pull e atualiza as dependências com npm install.');
       passos.append(li);
     } else {
-      passos.append(el('li', null, 'Esta pasta não veio de um git clone: baixe a versão nova no GitHub e troque a pasta, ou clone o repositório e rode ./instalar.sh.'));
+      passos.append(el('li', null, 'Esta pasta não veio de um git clone: baixe a versão nova no GitHub e troque a pasta, ou clone o repositório e rode ' + (v.windows ? 'instalar.cmd.' : './instalar.sh.')));
     }
-    passos.append(el('li', null, 'Abra A Estação de novo (dois cliques no app ou ./iniciar.sh).'));
+    passos.append(el('li', null, v.windows ? 'Abra A Estação de novo (dois cliques no atalho da Área de Trabalho).' : 'Abra A Estação de novo (dois cliques no app ou ./iniciar.sh).'));
     p.append(passos);
     if (v.clone && v.comando) p.append(linhaDeComando(v.comando));
   } else if (n.estado === 'ok') {
